@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python Tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# Temporary Files
+*.tmp
+*.temp
+
+# RAG / Vector Store
+data/vectorstore/
+data/faiss/
+*.faiss
+*.pkl
+
+# Generated / Processed Data
+# 원본(raw)은 Git에 포함하고,
+# 용량이 큰 processed 데이터만 필요에 따라 제외
+# data/processed/
+
+# Model / Hugging Face Cache
+.cache/
+huggingface/
+transformers_cache/
+
+# Local Database
+*.db
+*.sqlite
+*.sqlite3
