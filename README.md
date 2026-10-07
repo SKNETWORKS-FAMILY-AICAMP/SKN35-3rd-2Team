@@ -1,4 +1,4 @@
-.
+```
 ├── README.md
 ├── data
 │ ├── processed
@@ -39,3 +39,4 @@
 │ │ └── splitter.py # 문서 Chunk 분할
 │ └── vectorstore # Vector DB 저장 및 검색 관리
 └── uv.lock
+```
