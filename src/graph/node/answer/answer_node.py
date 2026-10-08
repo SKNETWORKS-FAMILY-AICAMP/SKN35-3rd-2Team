@@ -1,7 +1,7 @@
-from src.const.models import create_nvidia_model
+from src.const.models import create_openai_model
 from src.prompt.answer_prompt import ANSWER_SYSTEM_PROMPT
 
-model = create_nvidia_model()
+model = create_openai_model()
 
 
 def answer_node(state):

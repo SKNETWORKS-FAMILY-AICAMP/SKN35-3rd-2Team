@@ -1,8 +1,8 @@
-from src.const.models import create_nvidia_model
+from src.const.models import create_openai_model
 from src.graph.state import State
 from src.prompt.general_prompt import GENERAL_SYSTEM_PROMPT
 
-model = create_nvidia_model()
+model = create_openai_model()
 
 
 def general_node(state: State):

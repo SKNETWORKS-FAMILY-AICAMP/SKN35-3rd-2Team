@@ -2,10 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.const.models import create_nvidia_model
+from src.const.models import create_openai_model
 from src.prompt.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
-model = create_nvidia_model()
+model = create_openai_model()
 
 
 class RouteDecision(BaseModel):
