@@ -31,4 +31,5 @@ dependencies = [
     "langchain-openai>=1.6.7",
 
     "langchain-pinecone>=0.2.13",
+    "pinecone-text>=0.11.0",
 ]

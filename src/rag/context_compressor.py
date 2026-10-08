@@ -38,8 +38,8 @@ EXTRACT_PROMPT = ChatPromptTemplate.from_messages([
 @lru_cache(maxsize=1)
 def _extract_chain():
     from langchain_core.output_parsers import StrOutputParser
-    from src.const.models import get_llm
-    return EXTRACT_PROMPT | get_llm() | StrOutputParser()
+    from src.const.models import create_openai_model
+    return EXTRACT_PROMPT | create_openai_model() | StrOutputParser()
 
 
 def _compress_llm(question: str, docs: list[Document]) -> list[Document]:
@@ -62,8 +62,8 @@ def _split_sentences(text: str) -> list[str]:
 
 def _compress_embedding(question: str, docs: list[Document], threshold: float,
                         keep_neighbors: int = 1) -> list[Document]:
-    from src.const.models import get_embeddings
-    emb = get_embeddings()
+    from src.const.models import create_openai_embedding
+    emb = create_openai_embedding()
     q = np.array(emb.embed_query(question))
     out = []
     for doc in docs:
@@ -115,6 +115,6 @@ def format_context(docs: list[Document]) -> str:
     blocks = []
     for i, d in enumerate(docs, start=1):
         m = d.metadata
-        src = m.get("source_url") or f"{m.get('doc_path', '')} ({m.get('source', '')} p.{m.get('page_start', '?')})"
-        blocks.append(f"[{i}] {m.get('title', '')} | {m.get('tech', '')} | {src}\n{d.page_content}")
+        src = m.get("source_url") or m.get("source", "")
+        blocks.append(f"[{i}] {m.get('title', '')} | {m.get('technology', '')} | {src}\n{d.page_content}")
     return "\n\n---\n\n".join(blocks)

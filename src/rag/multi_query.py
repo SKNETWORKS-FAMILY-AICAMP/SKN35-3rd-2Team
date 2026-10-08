@@ -39,8 +39,8 @@ class Queries(BaseModel):
 
 @lru_cache(maxsize=1)
 def _chain():
-    from src.const.models import get_llm
-    return PROMPT | get_llm().with_structured_output(Queries)
+    from src.const.models import create_openai_model
+    return PROMPT | create_openai_model().with_structured_output(Queries)
 
 
 def generate_queries(question: str, n: int = 3, include_original: bool = True) -> list[str]:

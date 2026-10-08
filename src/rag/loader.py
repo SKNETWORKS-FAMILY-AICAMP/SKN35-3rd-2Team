@@ -1,23 +1,41 @@
+# 전처리된 Document 파일을 LangChain Document 객체로 읽는 모듈
+#
+# 전체 흐름 (PDF 변환 없음)
+#   1. python -m src.preprocessing.mdx_to_document
+#        data/raw/{tech}/**/*.mdx → data/processed/{tech}/documents.jsonl   (.mdx 정리, 1줄 = 문서 1개)
+#   2. 이 파일: data/processed/{tech}/documents.jsonl → Document 리스트
+#   3. splitter.split_documents → retriever.build_pinecone
+#
+# documents.jsonl 이 없으면 그 자리에서 전처리(1번)를 먼저 실행하고 읽는다.
+#
+# Document.metadata (전처리에서 만든 값 그대로)
+#   technology    : langchain / langgraph / mcp
+#   document_type : error / specification / tutorial / example / documentation
+#   source        : data/raw/langchain/errors/INVALID_PROMPT_INPUT.mdx  (원본 .mdx, 프로젝트 루트 기준)
+#   file_name     : INVALID_PROMPT_INPUT.mdx
+#   title, description, source_url(문서 사이트), github_url, parent_id, format="markdown"
+#
+# 실행 (프로젝트 루트에서)
+#   python -m src.rag.loader
 
-# MDX 파일을 LangChain Document 객체로 변환하는 모듈
-
+import json
 from pathlib import Path
 
 from langchain_core.documents import Document
 
 from src.const.config import (
-    RAW_LANGCHAIN_PATH,
-    RAW_LANGGRAPH_PATH,
-    RAW_MCP_PATH,
+    PROCESSED_LANGCHAIN_PATH,
+    PROCESSED_LANGGRAPH_PATH,
+    PROCESSED_MCP_PATH,
 )
+
+DOCUMENTS_FILE_NAME = "documents.jsonl"
 
 
 def _detect_document_type(file_path: Path) -> str:
     """
     파일 경로를 기반으로 문서 유형을 간단하게 판단한다.
-
-    현재는 전처리를 하지 않기 때문에
-    최소한의 metadata만 생성한다.
+    (documents.jsonl 에 document_type 이 없을 때만 사용)
     """
 
     parts = file_path.parts
@@ -45,11 +63,11 @@ def load_mdx_documents(
     technology: str,
 ) -> list[Document]:
     """
-    root_dir 아래의 모든 MDX 파일을 찾아
+    root_dir/documents.jsonl (전처리 결과)을 읽어
     LangChain Document 객체로 변환한다.
 
     Args:
-        root_dir: MDX 파일이 저장된 루트 디렉터리
+        root_dir: 전처리 결과 폴더 (data/processed/{technology})
         technology: langchain / langgraph / mcp
 
     Returns:
@@ -58,43 +76,59 @@ def load_mdx_documents(
 
     root_path = Path(root_dir)
 
-    if not root_path.exists():
-        raise FileNotFoundError(f"디렉터리를 찾을 수 없습니다: {root_path}")
+    file_path = root_path / DOCUMENTS_FILE_NAME
+
+    if not file_path.exists():
+        print(f"{file_path} 가 없어 .mdx 전처리를 먼저 실행합니다.")
+
+        from src.preprocessing.mdx_to_document import convert_framework
+
+        convert_framework(technology)
+
+    if not file_path.exists():
+        print(f"[건너뜀] {technology}: 문서가 없습니다. data/raw/{technology} 에 .mdx 파일이 있는지 확인하세요.")
+        return []
 
     documents = []
 
-    mdx_files = sorted(root_path.rglob("*.mdx"))
+    with file_path.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
 
-    for file_path in mdx_files:
-        text = file_path.read_text(encoding="utf-8")
+            row = json.loads(line)
+            text = row.pop("text")
 
-        document_type = _detect_document_type(file_path)
+            metadata = row
+            metadata.setdefault("technology", technology)
+            metadata.setdefault("document_type", _detect_document_type(Path(metadata.get("source", ""))))
+            metadata.setdefault("file_name", Path(metadata.get("source", "")).name)
 
-        document = Document(
-            page_content=text,
-            metadata={
-                "technology": technology,
-                "document_type": document_type,
-                "source": str(file_path),
-                "file_name": file_path.name,
-            },
-        )
+            document = Document(
+                page_content=text,
+                metadata=metadata,
+            )
 
-        documents.append(document)
+            documents.append(document)
 
     return documents
 
 
-def load_documents():
+def load_documents(technologies: list[str] | None = None):
+    """technologies 를 주면 일부만 (예: ["mcp"]). 없으면 세 기술 전부."""
+
     data_dict = {
-        "langchain": RAW_LANGCHAIN_PATH,
-        "langgraph": RAW_LANGGRAPH_PATH,
-        "mcp": RAW_MCP_PATH,
+        "langchain": PROCESSED_LANGCHAIN_PATH,
+        "langgraph": PROCESSED_LANGGRAPH_PATH,
+        "mcp": PROCESSED_MCP_PATH,
     }
 
     documents = []
 
     for technology, path in data_dict.items():
+        if technologies and technology not in technologies:
+            continue
+
         loaded_documents = load_mdx_documents(
             root_dir=path,
             technology=technology,
@@ -107,156 +141,12 @@ def load_documents():
     print(f"전체 Document 개수: {len(documents)}")
 
     return documents
-=======
-"""
-문서 로딩: data/pdf/*.pdf → LangChain Document 목록
-
-입력 PDF (md_to_pdf.py 결과, 경로는 src/const/config.py 의 PDF_FILES)
-  data/pdf/langchain.pdf
-  data/pdf/langgraph.pdf
-  data/pdf/mcp.pdf
-tech 값은 PDF 파일 이름(langchain/langgraph/mcp)입니다.
-이 PDF 들은 아래 구조라서, 페이지를 그냥 자르지 않고 "원래 문서(.mdx) 단위" 로 다시 묶을 수 있습니다.
-
-  1쪽         표지
-  2~n쪽       목차
-  (폴더 구분 페이지)   예: "langchain / errors"
-  문서 첫 쪽  [문서 제목]
-              [langchain/errors/INVALID_PROMPT.mdx]   ← 원본 경로 줄 (문서 시작 표시)
-              본문 ...
-  각 쪽 맨 아래 "3 / 16" 같은 쪽 번호
-
-그래서 로더는
-  - 표지·목차·폴더 구분 페이지와 쪽 번호 줄을 버리고
-  - "원본 경로 줄" 이 나올 때마다 새 문서를 시작해서
-  - 문서 1개 = Document 1개 로 돌려줍니다 (여러 쪽에 걸친 문서는 이어 붙임)
-
-Document.metadata
-  tech        : langchain / langgraph / mcp   (PDF 파일 이름)
-  title       : 문서 제목
-  doc_path    : langchain/errors/INVALID_PROMPT.mdx  (원본 경로, 출처 표시용)
-  source      : langchain.pdf
-  page_start  : 시작 쪽 (1부터)
-  page_end    : 끝 쪽
-  doc_type    : official_doc
-  parent_id   : langchain-errors-invalid_prompt   (문서 고유 ID, 청크들의 부모)
-
-사용 예
-  from src.rag.loader import load_documents
-  docs = load_documents()                        # data/pdf 의 PDF 3개
-  docs = load_documents(techs=["mcp"])           # mcp.pdf 만
-
-  python -m src.rag.loader                           # 몇 개 읽혔는지 확인
-"""
-
-import re
-from pathlib import Path
-
-import pymupdf                                      # pip install pymupdf  (PDF 텍스트 추출, 빠르고 한글 OK)
-from langchain_core.documents import Document
-
-from src.const.config import PDF_FILES, TECHS
-
-PAGE_NUMBER_RE = re.compile(r"^\s*\d+\s*/\s*\d+\s*$")             # "3 / 16"
-SOURCE_LINE_RE = re.compile(r"^[\w.\-]+(?:/[\w.\- ]+)*\.mdx?$")   # "langchain/errors/x.mdx"
-
-
-def make_parent_id(doc_path: str) -> str:
-    """'langchain/errors/INVALID_PROMPT.mdx' → 'langchain-errors-invalid_prompt'"""
-    stem = re.sub(r"\.mdx?$", "", doc_path)
-    return re.sub(r"[^\w]+", "-", stem).strip("-").lower()
-
-
-def _page_lines(page) -> list[str]:
-    lines = [l.rstrip() for l in page.get_text().splitlines()]
-    return [l for l in lines if l.strip() and not PAGE_NUMBER_RE.match(l)]
-
-
-def tech_of(pdf_path: Path) -> str:
-    """data/processed/mcp/mcp.pdf → 'mcp'. 기술 폴더 밖에 있으면 파일 이름으로."""
-    for part in reversed(pdf_path.parent.parts):
-        if part.lower() in TECHS:
-            return part.lower()
-    return pdf_path.stem.lower()
-
-
-def load_pdf(pdf_path: Path, tech: str | None = None) -> list[Document]:
-    """PDF 1개 → 원래 문서 단위 Document 목록."""
-    tech = tech or tech_of(pdf_path)
-    pdf = pymupdf.open(pdf_path)
-    docs: list[Document] = []
-    cur: dict | None = None                         # 지금 모으는 중인 문서
-
-    def close_current():
-        if cur and "\n".join(cur["lines"]).strip():
-            docs.append(Document(
-                page_content="\n".join(cur["lines"]).strip(),
-                metadata={
-                    "tech": tech,
-                    "title": cur["title"],
-                    "doc_path": cur["doc_path"],
-                    "source": pdf_path.name,
-                    "page_start": cur["page_start"],
-                    "page_end": cur["page_end"],
-                    "doc_type": "official_doc",
-                    "parent_id": make_parent_id(cur["doc_path"]),
-                },
-            ))
-
-    for page_no, page in enumerate(pdf, start=1):
-        lines = _page_lines(page)
-        # 이 페이지에서 "원본 경로 줄" 위치 찾기 (문서 시작 표시)
-        src_idx = next((i for i, l in enumerate(lines) if i > 0 and SOURCE_LINE_RE.match(l.strip())), None)
-
-        if src_idx is None:
-            if cur is None or len(lines) <= 1:
-                continue                            # 표지·목차·폴더 구분 페이지 → 버림
-            cur["lines"].extend(lines)              # 앞 문서가 다음 쪽으로 이어짐
-            cur["page_end"] = page_no
-            continue
-
-        if cur is not None and src_idx > 1:         # 제목 줄 앞에 남은 내용은 앞 문서 꼬리
-            cur["lines"].extend(lines[: src_idx - 1])
-        close_current()
-        cur = {
-            "title": lines[src_idx - 1].strip(),
-            "doc_path": lines[src_idx].strip(),
-            "lines": [],
-            "page_start": page_no,
-            "page_end": page_no,
-        }
-        cur["lines"].extend(lines[src_idx + 1:])
-
-    close_current()
-    pdf.close()
-    return docs
-
-
-def load_documents(techs: list[str] | None = None, pdf_files: dict | None = None) -> list[Document]:
-    """data/pdf/langchain.pdf, langgraph.pdf, mcp.pdf 를 읽음. techs=["mcp"] 처럼 일부만 고를 수 있음.
-    pdf_files={"langchain": "다른/경로.pdf", ...} 로 경로를 바꿀 수도 있음."""
-    files = {t: Path(p) for t, p in (pdf_files or PDF_FILES).items()}
-    if techs:
-        files = {t: p for t, p in files.items() if t in {x.lower() for x in techs}}
-    docs = []
-    for tech, path in files.items():
-        if not path.exists():
-            print(f"[loader] 없음, 건너뜀: {path}")
-            continue
-        loaded = load_pdf(path, tech=tech)
-        print(f"[loader] {path.name}: 문서 {len(loaded)}개")
-        docs.extend(loaded)
-    if not docs:
-        raise FileNotFoundError(
-            "읽을 PDF 가 없습니다. 다음 위치에 PDF 를 두세요: " + ", ".join(str(p) for p in files.values()))
-    return docs
 
 
 if __name__ == "__main__":
-    all_docs = load_documents()
-    print(f"총 {len(all_docs)}개 문서")
-    if all_docs:
-        d = all_docs[0]
-        print("예시 메타데이터:", d.metadata)
-        print("예시 본문:", d.page_content[:300])
+    docs = load_documents()
 
+    if docs:
+        print()
+        print(docs[0].metadata)
+        print(docs[0].page_content[:300])
