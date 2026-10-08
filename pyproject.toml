@@ -22,4 +22,6 @@ dependencies = [
     "transformers>=5.16.1",
     "httpx>=0.28.1",
     "requests>=2.34.2",
+    "pinecone>=7.3.0",
+    "langchain-pinecone>=0.2.13",
 ]
