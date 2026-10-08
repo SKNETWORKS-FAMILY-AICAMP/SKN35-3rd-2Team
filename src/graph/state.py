@@ -1,16 +1,18 @@
-from typing import Any, TypedDict
+from typing import Any, NotRequired
+
+from langgraph.graph import MessagesState
 
 
-class State(TypedDict, total=False):
-    question: str
-    image: Any
+class State(MessagesState):
+    original_question: str
 
-    image_analysis: str
+    image: NotRequired[Any]
+    image_analysis: NotRequired[str]
 
-    retrieved_docs: list
-    mcp_results: list
+    retrieved_docs: NotRequired[list]
+    mcp_results: NotRequired[list]
 
-    route: str
-    reason: str
+    route: NotRequired[str]
+    reason: NotRequired[str]
 
-    answer: str
+    answer: NotRequired[str]
