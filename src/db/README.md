@@ -55,6 +55,45 @@ with db_session() as s:                      # 화면에 대화 내역을 그릴
 - 다른 환경 파일을 쓰려면 `ENV_FILE=.env.tidb`를 명령 앞에 붙인다. 지정하면 이미 읽힌 값보다 우선한다.
 - 이 폴더는 팀의 `src/const/config.py`에 의존하지 않는다 (`import src.db`가 `config.py`를 불러오지 않는다).
 
+## 개발용 DB 준비 (팀원 각자)
+
+개발은 팀 전체가 하므로, **각자 PC에서 아래 셋 중 하나**를 고른다. 시연은 TiDB Cloud로 한다.
+모든 방법에서 코드는 같고, `.env`의 `DB_*` 값만 다르다. 테스트(`uv run pytest tests -q`)는 DB가 없어도 돈다(메모리 SQLite).
+
+| 방법 | 언제 | 주의 |
+|---|---|---|
+| **A. 각자 로컬 MySQL** (권장) | 시연 DB(TiDB)와 가장 비슷하게 개발하고 싶을 때 | 계정과 대화 데이터는 **PC마다 따로**다 (다른 팀원의 계정은 내 PC에 없다). 마이그레이션과 시드도 각자 한 번씩 한다 |
+| **B. 공용 TiDB** | 팀원이 같은 데이터를 봐야 할 때 | 시연 데이터와 섞이지 않게 **개발용 DB를 따로 만들어**(예: `skn35_3rd_dev`) `DB_DATABASE`로 지정한다. 마이그레이션과 시드는 한 사람만 실행한다 |
+| **C. 설치 없이 SQLite** | 빠르게 코드만 돌려 볼 때 | `DB_*`를 비워 두면 `data/app.sqlite3` 파일로 동작한다(`.gitignore`로 제외됨). MySQL/TiDB와 동작이 다를 수 있어서, 동작 확인은 A나 B로 한 번 더 한다 |
+
+### A. 로컬 MySQL 만들기
+
+1. MySQL을 설치한다 (이 저장소의 확인은 **MySQL 8.4** 기준이다. 다른 버전과 MariaDB는 확인하지 못했다).
+2. 관리자(root)로 접속해서 이 프로젝트 전용 데이터베이스와 사용자를 만든다. 다른 프로젝트 DB와 섞이지 않게 전용으로 만든다.
+   - 접속: 설치 폴더의 `bin\mysql.exe -u root -p` (또는 DBeaver 같은 도구에서 SQL 실행)
+   ```sql
+   CREATE DATABASE skn35_3rd CHARACTER SET utf8mb4;
+   CREATE USER 'skn35_3rd'@'localhost' IDENTIFIED BY '<새 비밀번호>';
+   GRANT ALL PRIVILEGES ON skn35_3rd.* TO 'skn35_3rd'@'localhost';
+   ```
+   - DBeaver에서 여러 줄을 한 번에 실행하려면 `Alt + X`(스크립트 실행)를 쓴다. `Ctrl + Enter`는 한 줄만 실행한다.
+   - DBeaver에서만 `Public Key Retrieval is not allowed` 오류가 나면 연결 설정의 드라이버 속성에서 `allowPublicKeyRetrieval=true`로 바꾼다 (이 프로젝트 코드로 접속할 때는 필요하지 않았다).
+3. `.env`에 접속 값을 넣는다. 로컬은 포트가 `3306`이고(`.env.example`의 기본 `4000`은 TiDB용), `localhost`면 TLS는 자동으로 꺼진다.
+   ```
+   DB_HOST=localhost
+   DB_PORT=3306
+   DB_USERNAME=skn35_3rd
+   DB_PASSWORD=<위에서 정한 비밀번호>
+   DB_DATABASE=skn35_3rd
+   ```
+4. 테이블을 만든다: `uv run alembic -c src/db/alembic.ini upgrade head` (아래 명령어 참고). 관리자 계정이 필요하면 `.env`의 `SEED_ADMIN_*`를 채우고 시드를 실행한다.
+
+### B. 공용 TiDB를 쓸 때
+
+- 접속 정보(호스트, 사용자, 비밀번호)는 채팅이나 저장소에 올리지 말고 안전한 방법으로 받아 `.env`에만 넣는다.
+- `localhost`가 아닌 서버는 TLS가 자동으로 켜진다. 포트는 기본 `4000`이다.
+- 두 DB(로컬 MySQL과 TiDB)를 오가며 쓸 때는 TiDB 값을 `.env.tidb` 같은 별도 파일에 두고 `ENV_FILE=.env.tidb`를 명령 앞에 붙이면 된다 (`.env.*`는 `.gitignore`로 제외된다). 하나만 쓰면 `.env` 하나면 충분하다.
+
 ## 명령어 (프로젝트 루트에서)
 
 ```bash
