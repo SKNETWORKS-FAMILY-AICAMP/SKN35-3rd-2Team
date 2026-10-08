@@ -69,8 +69,8 @@ PROMPT = ChatPromptTemplate.from_messages([
 
 @lru_cache(maxsize=1)
 def _chain():
-    from src.const.models import get_llm
-    return PROMPT | get_llm().with_structured_output(RewrittenQuery)
+    from src.const.models import create_openai_model
+    return PROMPT | create_openai_model().with_structured_output(RewrittenQuery)
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +141,8 @@ def rewrite_query(question: str, history=None) -> RewrittenQuery:
 
 
 def to_filters(rq: RewrittenQuery) -> dict | None:
-    """retriever.search(filters=...) 에 넘길 필터. 기술을 모르면 None (전체 검색)."""
-    return {"tech": rq.tech} if rq.tech != "unknown" else None
+    """PineconeHybridRetriever(filters=...) 에 넘길 필터. 기술을 모르면 None (전체 검색)."""
+    return {"technology": rq.tech} if rq.tech != "unknown" else None
 
 
 if __name__ == "__main__":
