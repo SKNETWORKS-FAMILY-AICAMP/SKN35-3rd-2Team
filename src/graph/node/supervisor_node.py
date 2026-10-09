@@ -2,10 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.const.models import create_nvidia_model
+from src.const.models import create_openai_model
 from src.prompt.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
-model = create_nvidia_model()
+model = create_openai_model()
 
 
 class RouteDecision(BaseModel):
@@ -21,6 +21,7 @@ class RouteDecision(BaseModel):
 
 
 def supervisor_node(state):
+    print("supervisor 진입", end="\n\n")
     supervisor = model.with_structured_output(RouteDecision)
 
     decision = supervisor.invoke(
@@ -33,11 +34,11 @@ def supervisor_node(state):
                 "role": "user",
                 "content": str(
                     {
-                        "question": state["question"],
-                        "image": state["image"],
-                        "image_analysis": state["image_analysis"],
-                        "retrieved_docs": state["retrieved_docs"],
-                        "mcp_results": state["mcp_results"],
+                        "messages": state["messages"][-1].content,
+                        "image": state.get("image"),
+                        "image_analysis": state.get("image_analysis"),
+                        "retrieved_docs": state.get("retrieved_docs"),
+                        "mcp_results": state.get("mcp_results"),
                     }
                 ),
             },

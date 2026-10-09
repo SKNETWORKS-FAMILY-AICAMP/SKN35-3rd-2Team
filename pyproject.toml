@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "openai>=3.26.0",
+    "python-dotenv>=1.2.4",
     "beautifulsoup4>=4.15.0",
     "faiss-cpu>=1.15.0",
     "langchain[mcp]>=1.4.0",
@@ -23,7 +25,11 @@ dependencies = [
     "httpx>=0.28.1",
     "requests>=2.34.2",
     "pinecone>=7.3.0",
+    "markdown>=3.11",
+    "playwright>=1.63.0",
+    "pymupdf>=1.28.2",
+    "langchain-openai>=1.6.7",
     "langchain-pinecone>=0.2.13",
-    "openai>=3.26.0",
-    "python-dotenv>=1.2.4",
+    "pinecone-text>=0.11.0",
+    "sentence-transformers>=6.1.0",
 ]

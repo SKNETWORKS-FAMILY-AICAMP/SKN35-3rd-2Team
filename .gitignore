@@ -43,14 +43,14 @@ logs/
 *.temp
 
 # RAG / Vector Store
-src/vectorstore/
+# src/vectorstore/
 *.faiss
 *.pkl
 
 # Generated / Processed Data
 # 원본(raw)은 Git에 포함하고,
 # 용량이 큰 processed 데이터만 필요에 따라 제외
-data/processed/
+# data/processed/
 
 # Model / Hugging Face Cache
 .cache/
