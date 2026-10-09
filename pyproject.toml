@@ -30,4 +30,14 @@ dependencies = [
     "langchain-pinecone>=0.2.13",
     "pinecone-text>=0.11.0",
     "sentence-transformers>=6.1.0",
+    "sqlalchemy>=2.0",
+    "pymysql>=1.1",
+    "alembic>=1.13",
+    "python-dotenv>=1.0",
+    "certifi>=2024.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
 ]
