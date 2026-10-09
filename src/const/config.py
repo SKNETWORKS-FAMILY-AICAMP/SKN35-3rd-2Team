@@ -99,3 +99,13 @@ PINECONE_REGION = os.getenv("PINECONE_REGION", "us-east-1")
 # 청크 크기 (글자 수, 영어 1,000자 ≈ 250 토큰)
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
+
+
+# 채팅 UI 설정 및 기존 NVIDIA 호환 설정
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or OPEN_API_KEY
+OPENAI_MODEL = os.getenv("OPENAI_MODEL") or "gpt-4.1-mini"
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL")
+NVIDIA_EMBEDDING_MODEL = os.getenv("NVIDIA_EMBEDDING")
+NVIDIA_RERANK_API_KEY = os.getenv("NVIDIA_RERANK_API_KEY")
+NVIDIA_RERANK_MODEL = os.getenv("NVIDIA_RERANK_MODEL")
