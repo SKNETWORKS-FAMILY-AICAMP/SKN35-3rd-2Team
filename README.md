@@ -62,23 +62,23 @@ cd C:\sk-encoa\SKN35-3rd-2Team
 
 ## 3. 실제 AI 답변 확인
 
-기본값인 'OpenAI AI 답변'은 .env의 OPENAI_API_KEY를 사용합니다. OPENAI_MODEL이 없으면 gpt-4.1-mini를 사용합니다. OpenAI SDK의 Responses API로 이전 대화와 질문을 전달합니다. NVIDIA를 사용하려면 왼쪽에서 'NVIDIA AI 답변'을 선택하세요. 프로젝트 .env에 NVIDIA_API_KEY와 NVIDIA_MODEL이 설정되어 있어야 합니다. 기존 src/const/models.py의 생성 함수를 사용합니다. 질문을 보낼 때 외부 모델 API가 호출됩니다.
+기본값인 'OpenAI AI 답변'은 .env의 OPENAI_API_KEY를 사용합니다. 팀 그래프와 채팅 화면은 OPEN_MODEL을 사용합니다(기본값: gpt-4o-mini). 팀 LangGraph의 Supervisor가 대화와 질문을 받아 일반 답변 또는 최종 답변으로 연결합니다. 그래프 모델은 OPEN_MODEL을 사용합니다(기본값: gpt-4o-mini). NVIDIA를 사용하려면 왼쪽에서 'NVIDIA AI 답변'을 선택하세요. 프로젝트 .env에 NVIDIA_API_KEY와 NVIDIA_MODEL이 설정되어 있어야 합니다. 기존 src/const/models.py의 생성 함수를 사용합니다. 질문을 보낼 때 외부 모델 API가 호출됩니다.
 
-우선 평가표 E10, 이어서 E11을 실행하고 답변을 기록하세요. 현재는 일반 LLM 답변만 연결되어 있으며, RAG 검색·MCP·이미지 입력은 아직 연결 전입니다.
+우선 평가표 E10, 이어서 E11을 실행하고 답변을 기록하세요. 일반 답변과 RAG 문서 검색을 연결했습니다. MCP·이미지 입력은 아직 연결 전입니다.
 
 ## 4. 코드 이해하기
 
 - st.chat_input: 사용자가 질문을 입력하는 칸입니다.
 - st.chat_message: 사용자와 AI의 메시지를 표시합니다.
 - st.session_state.messages: 같은 접속에서 대화를 기억합니다. DB 저장은 아니므로 접속이 새로 만들어지면 사라질 수 있습니다.
-- generate_answer: 답변을 만드는 함수입니다. 현재는 연습 응답 또는 OpenAI/NVIDIA 호출을 하고, 나중에 팀의 LangGraph 호출로 교체합니다.
+- generate_answer: 답변을 만드는 함수입니다. 현재는 연습 응답, OpenAI 팀 그래프 또는 NVIDIA 직접 호출을 하고, OpenAI 모드는 팀의 LangGraph를 호출하고 status·answer·sources 형식으로 결과를 반환합니다.
 - st.spinner: 실제 답변을 기다리는 동안 처리 상태를 표시합니다.
 
 API 요청이 실패하면 안내 메시지가 나오며 실패한 질문은 대화 기록에 추가하지 않습니다. 설정을 수정했다면 Ctrl+C로 서버를 종료하고 다시 실행하세요.
 
 ## 5. 팀과 다음에 합의할 것
 
-백엔드 함수의 질문·대화 기록 입력 형식과 답변·출처·상태 반환 형식을 합의하세요. 전체 그래프 연결 후 평가표의 RAG/MCP 질문을 실행하면 됩니다.
+백엔드 함수의 질문·대화 기록 입력 형식과 답변·출처·상태 반환 형식을 합의하세요. 현재 일반 답변 그래프가 연결되었습니다. RAG는 Pinecone 문서를 검색한 뒤 근거와 함께 답변합니다. MCP/이미지는 준비 중 안내를 표시합니다.
 
 
 ## 파일별 역할
@@ -89,3 +89,15 @@ API 요청이 실패하면 안내 메시지가 나오며 실패한 질문은 대
 - src/const/models.py: OpenAI 클라이언트와 NVIDIA 모델을 생성합니다.
 - src/prompt/chat_prompt.py: 일반 답변 프롬프트를 관리합니다.
 - src/evaluation/evaluation_questions.md: 평가 질문과 실행 기록을 관리합니다.
+
+
+## 그래프 연결 확인
+
+OpenAI 모드는 `src/graph/chat_service.py`의 `run_chat()`을 통해 팀 그래프를 실행합니다. 전체 이력을 호출마다 전달하며 그래프 체크포인터는 사용하지 않습니다. RAG 분기는 문서 검색 후 최종 답변으로 연결됩니다. MCP·이미지 분기는 준비 중 안내를 반환합니다. DB 저장은 아직 연결 전입니다.
+
+입력·출력 규약은 `src/graph/README.md`에 정리했습니다. 연결 테스트는 `python -m pytest tests/graph -q`로 실행합니다. 실제 API 없이 모의 응답으로 입력·분기·문맥 전달·초기화·오류 표시를 검증합니다. 실제 답변 품질은 gpt-4o-mini로 E10·E11을 재평가해야 합니다.
+
+
+## RAG 연결 확인
+
+서버를 재시작한 뒤 OpenAI 모드에서 '공식 문서를 검색해서 LangGraph의 State를 설명해줘'를 입력합니다. 답변의 [1] 표기와 '참고한 문서' 링크를 확인하세요. Pinecone API 키, 기존 인덱스, data/processed/bm25_params.json이 필요합니다. 채팅 중 인덱스를 생성·초기화하지 않습니다. 결과가 없으면 근거 부족을 안내하고, 검색 실패는 오류로 표시합니다. 다중 검색과 로컬 재정렬은 이번 연결에서 사용하지 않습니다. 문서 번호를 인용한 검색 결과만 출처로 표시하며, 인용의 정확성은 직접 문서와 대조해야 합니다.

@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from src.const.models import create_openai_model
 from src.prompt.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
-model = create_openai_model()
 
 
 class RouteDecision(BaseModel):
@@ -21,6 +20,7 @@ class RouteDecision(BaseModel):
 
 
 def supervisor_node(state):
+    model = create_openai_model(timeout=60)
     print("supervisor 진입", end="\n\n")
     supervisor = model.with_structured_output(RouteDecision)
 
@@ -34,7 +34,7 @@ def supervisor_node(state):
                 "role": "user",
                 "content": str(
                     {
-                        "messages": state["messages"][-1].content,
+                        "messages": [{"role": m.type, "content": m.content} for m in state["messages"]],
                         "image": state.get("image"),
                         "image_analysis": state.get("image_analysis"),
                         "retrieved_docs": state.get("retrieved_docs"),

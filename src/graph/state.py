@@ -16,3 +16,5 @@ class State(MessagesState):
     reason: NotRequired[str]
 
     answer: NotRequired[str]
+    sources: NotRequired[list[dict]]
+    rag_error: NotRequired[str]
