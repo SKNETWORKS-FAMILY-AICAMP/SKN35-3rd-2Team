@@ -1,5 +1,12 @@
+"""실행: python -m streamlit run main.py"""
+import streamlit as st
+
+from src.app.chat import render_chat
+
+
 def main():
-    print("Hello from skn35-3rd-2team!")
+    st.set_page_config(page_title="AI 개발 도우미", page_icon=":material/code:")
+    render_chat()
 
 
 if __name__ == "__main__":

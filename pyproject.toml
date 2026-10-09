@@ -24,4 +24,6 @@ dependencies = [
     "requests>=2.34.2",
     "pinecone>=7.3.0",
     "langchain-pinecone>=0.2.13",
+    "openai>=3.26.0",
+    "python-dotenv>=1.2.4",
 ]
