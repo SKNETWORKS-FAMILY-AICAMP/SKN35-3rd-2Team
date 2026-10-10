@@ -5,7 +5,6 @@ from src.graph.state import State
 
 
 def general_agent():
-    print("general_agent 진입", end="\n\n")
     builder = StateGraph(State)
 
     builder.add_node("general_node", general_node)

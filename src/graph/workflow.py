@@ -3,35 +3,36 @@ from langgraph.graph import END, START, StateGraph
 
 from src.agent.answer_agent import answer_agent
 from src.agent.general_agent import general_agent
+from src.agent.rag_agent import rag_agent
 from src.graph.node.supervisor_node import supervisor_node
 from src.graph.state import State
 
 
 def route_from_supervisor(state):
     print("route_from_supervisor 진입", end="\n\n")
+
+    print("선택된 Agent : ", state["route"], end="\n\n")
     return state["route"]
 
 
 def workflow():
-
-    # general = general_agent()
-    # answer = answer_agent()
-
     builder = StateGraph(State)
 
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("general", general_agent())
     builder.add_node("answer", answer_agent())
+    builder.add_node("rag", rag_agent())
     builder.add_edge(START, "supervisor")
+
     builder.add_conditional_edges(
         "supervisor",
         route_from_supervisor,
-        {"general": "general", "answer": "answer"},
+        {"rag": "rag", "general": "general", "answer": "answer"},
     )
 
     builder.add_edge("general", END)
     builder.add_edge("answer", END)
-
+    builder.add_edge("rag", END)
     memory = InMemorySaver()
 
     graph = builder.compile(checkpointer=memory)

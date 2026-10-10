@@ -5,7 +5,6 @@ from src.graph.state import State
 
 
 def answer_agent():
-    print("answer_agent 진입", end="\n\n")
     builder = StateGraph(State)
 
     builder.add_node("answer_node", answer_node)
