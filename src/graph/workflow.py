@@ -13,20 +13,17 @@ def route_from_supervisor(state):
 
 
 def workflow():
-
-    # general = general_agent()
-    # answer = answer_agent()
-
     builder = StateGraph(State)
 
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("general", general_agent())
     builder.add_node("answer", answer_agent())
     builder.add_edge(START, "supervisor")
+
     builder.add_conditional_edges(
         "supervisor",
         route_from_supervisor,
-        {"general": "general", "answer": "answer"},
+        {"rag": "rag", "general": "general", "answer": "answer"},
     )
 
     builder.add_edge("general", END)
