@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import streamlit as st
 
+from src import db
+
 from src.const.config import OPEN_MODEL
 from src.app.chat_service import chat_result, run_chat, run_db_chat, text_content
 from src.prompt.chat_prompt import CHAT_SYSTEM_PROMPT
@@ -192,8 +194,139 @@ def reset_conversation():
     st.session_state.chat_input = ""
 
 
+def clear_account_view():
+    """Remove the previous account's view and draft before switching identity."""
+    reset_conversation()
+    st.session_state.ui_history = {}
+    st.session_state.ui_db_notice = None
+    for key in list(st.session_state):
+        if key.startswith(("env_", "feedback_", "auth_")):
+            del st.session_state[key]
+    st.session_state.history_search = ""
+
+
+def logout():
+    clear_account_view()
+    st.session_state.pop("user_id", None)
+    st.session_state.pop("username", None)
+    st.session_state.ui_owner = None
+    st.session_state.ui_auth_open = False
+
+
+def load_saved_conversation(conversation_id):
+    """Read only the authenticated owner's messages; detach all ORM values."""
+    owner = st.session_state.get("user_id")
+    if owner is None:
+        return False
+    try:
+        with db.db_session() as session:
+            rows = db.list_messages(session, conversation_id, owner)
+            messages = [{"role": row.role, "content": row.content or "",
+                         "sources": [{name: getattr(source, name) for name in
+                                      ("url", "title", "tech", "version", "doc_type", "snippet", "score", "is_grounded")}
+                                     for source in sorted(row.sources, key=lambda source: source.rank)]}
+                        for row in rows]
+        st.session_state.messages = messages
+        st.session_state.conversation_id = conversation_id
+        st.session_state.ui_thread = f"db_{conversation_id}"
+        st.session_state.ui_failure = None
+        st.session_state.ui_db_notice = None
+        return True
+    except Exception:
+        st.session_state.ui_db_notice = "대화를 불러오지 못했습니다. DB 연결과 접근 권한을 확인해 주세요."
+        return False
+
+
+def render_saved_history(query):
+    try:
+        with db.db_session() as session:
+            items = [{"id": row.id, "title": row.title or "새 대화"}
+                     for row in db.list_conversations(session, st.session_state.user_id, limit=100)]
+    except Exception:
+        st.warning("대화 목록을 불러오지 못했습니다. DB 연결 상태를 확인해 주세요.")
+        return
+    visible = [item for item in items if query.casefold() in item["title"].casefold()]
+    st.caption("저장된 대화 · 최근 100개")
+    if not visible:
+        st.caption("아직 저장된 대화가 없어요." if not query else "검색 결과가 없어요.")
+    for item in visible:
+        if st.button(item["title"], key=f"saved_history_{item['id']}",
+                     icon=":material/chat_bubble_outline:", width="stretch"):
+            if load_saved_conversation(item["id"]):
+                st.session_state.answer_mode = "OpenAI AI 답변"
+                st.session_state.previous_mode = "OpenAI AI 답변"
+                st.session_state.ui_preview = "실제 채팅"
+                st.session_state.chat_input = ""
+                st.rerun()
+
+
+def render_authentication():
+    if st.session_state.get("user_id") is not None:
+        st.markdown(f"**{escape(st.session_state.get('username', '사용자'))}**")
+        st.caption("OpenAI 대화는 계정에 저장됩니다. 연습·NVIDIA 모드는 현재 접속에서만 유지됩니다.")
+        st.button("로그아웃", key="logout", icon=":material/logout:",
+                  width="stretch", on_click=logout)
+        return
+    st.markdown("**게스트**")
+    st.caption("로그인하면 저장된 대화를 다시 열어 이어서 질문할 수 있습니다. 게스트 대화는 계정으로 이전되지 않습니다.")
+    if st.button("로그인 / 회원가입", key="login_open", icon=":material/login:", width="stretch"):
+        st.session_state.ui_auth_open = not st.session_state.get("ui_auth_open", False)
+    if not st.session_state.get("ui_auth_open"):
+        return
+    with st.expander("계정 로그인", expanded=True):
+        action = st.radio("계정 메뉴", ["로그인", "회원가입"], key="auth_action", horizontal=True)
+        st.caption("아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상")
+        with st.form("account_form", clear_on_submit=True):
+            username = st.text_input("아이디", key="auth_username", max_chars=30)
+            password = st.text_input("비밀번호", type="password", key="auth_password")
+            confirmation = st.text_input("비밀번호 확인", type="password", key="auth_confirmation") if action == "회원가입" else None
+            submitted = st.form_submit_button(action, type="primary", width="stretch")
+        if submitted:
+            if not username.strip() or not password:
+                st.error("아이디와 비밀번호를 입력해 주세요.")
+                return
+            if action == "회원가입" and password != confirmation:
+                st.error("비밀번호 확인이 일치하지 않습니다.")
+                return
+            try:
+                with db.db_session() as session:
+                    if action == "회원가입":
+                        db.create_user(session, username, password, is_admin=False)
+                        identity = None
+                    else:
+                        user = db.authenticate(session, username, password)
+                        identity = {"id": user.id, "username": user.username} if user else None
+            except db.UsernameTakenError:
+                st.error("이미 사용 중인 아이디입니다.")
+                return
+            except ValueError:
+                st.error("아이디 형식과 비밀번호 길이를 확인해 주세요.")
+                return
+            except Exception:
+                st.error("계정 정보를 확인하지 못했습니다. DB 연결과 테이블 준비 상태를 확인해 주세요.")
+                return
+            if action == "회원가입":
+                st.success("회원가입이 완료되었습니다. 로그인 메뉴에서 로그인해 주세요.")
+            elif identity is None:
+                st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
+            else:
+                # Widget keys are cleared by the form; preserve no password in identity.
+                reset_conversation()
+                st.session_state.ui_history = {}
+                for key in list(st.session_state):
+                    if key.startswith(("env_", "feedback_")):
+                        del st.session_state[key]
+                st.session_state.user_id = identity["id"]
+                st.session_state.username = identity["username"]
+                st.session_state.ui_owner = identity["id"]
+                st.session_state.ui_db_notice = None
+                st.session_state.ui_auth_open = False
+                st.rerun()
+        st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다. 새로고침 후에는 다시 로그인할 수 있습니다.")
+
+
 def remember_conversation(mode):
-    if not st.session_state.messages:
+    if not st.session_state.messages or (mode == "OpenAI AI 답변" and st.session_state.get("user_id") is not None):
         return
     thread = st.session_state.ui_thread
     existing = st.session_state.ui_history.get(thread, {})
@@ -203,7 +336,7 @@ def remember_conversation(mode):
         "conversation_id": st.session_state.get("conversation_id"),
         "updated": datetime.now(timezone.utc),
     }
-    # Keep the session-local list bounded. Persisted DB history is a separate task.
+    # Bound temporary conversations; account history is read from the DB.
     if not existing and len(st.session_state.ui_history) > 30:
         oldest = min(st.session_state.ui_history, key=lambda key: st.session_state.ui_history[key]["updated"])
         del st.session_state.ui_history[oldest]
@@ -216,7 +349,9 @@ def render_sidebar():
         st.button("새 대화", icon=":material/add:", type="primary", width="stretch",
                   key="new_chat", on_click=reset_conversation)
         query = st.text_input("대화 검색", placeholder="대화 검색", key="history_search", label_visibility="collapsed")
-        st.caption("오늘 · 현재 접속의 대화")
+        if st.session_state.get("user_id") is not None:
+            render_saved_history(query)
+        st.caption("현재 접속의 임시 대화" if st.session_state.get("user_id") is not None else "현재 접속의 대화")
         items = sorted(st.session_state.ui_history.items(), key=lambda item: item[1]["updated"], reverse=True)
         visible = [(key, item) for key, item in items if query.casefold() in item["title"].casefold()]
         if not visible:
@@ -245,14 +380,7 @@ def render_sidebar():
         with st.expander("현재 사용할 수 있는 기능"):
             st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석: 준비 중")
         st.space(24)
-        st.caption("이전 대화 목록은 현재 접속에서만 유지됩니다.")
-        if st.session_state.get("user_id") is None:
-            st.markdown("**게스트**")
-            st.caption("로그인 연결 전 · 대화는 DB에 저장하지 않습니다.")
-            st.button("로그인 · 준비 중", disabled=True, icon=":material/login:", width="stretch")
-        else:
-            st.markdown("**로그인된 사용자**")
-            st.caption("OpenAI 모드의 대화는 DB에 저장됩니다.")
+        render_authentication()
         return mode
 
 
@@ -375,12 +503,16 @@ def send_question(prompt, mode, *, prepared=None):
                                  conversation_id=st.session_state.get("conversation_id"))
     if result.get("conversation_id") is not None:
         st.session_state.conversation_id = result["conversation_id"]
+    persisted = False
+    if mode == "OpenAI AI 답변" and st.session_state.get("user_id") is not None and result.get("conversation_id") is not None:
+        persisted = load_saved_conversation(result["conversation_id"])
     if result["status"] == "success":
-        st.session_state.messages.extend([user_message, {"role": "assistant", "content": result["answer"], "sources": result["sources"]}])
+        if not persisted:
+            st.session_state.messages.extend([user_message, {"role": "assistant", "content": result["answer"], "sources": result["sources"]}])
         st.session_state.ui_failure = None
         remember_conversation(mode)
     else:
-        st.session_state.ui_failure = {"message": user_message, "result": result}
+        st.session_state.ui_failure = {"message": user_message, "result": result, "saved_in_history": persisted}
     st.rerun()
 
 
@@ -396,6 +528,8 @@ def render_chat():
     st.session_state.ui_owner = owner
     st.html(STYLE)
     mode = render_sidebar()
+    if st.session_state.get("ui_db_notice"):
+        st.warning(st.session_state.ui_db_notice)
     preview = st.session_state.ui_preview != "실제 채팅"
     title = st.session_state.ui_preview if preview else (
         st.session_state.messages[0].get("display_content", st.session_state.messages[0]["content"])[:42]
@@ -414,13 +548,14 @@ def render_chat():
             render_message(message, index)
         failure = st.session_state.ui_failure
         if failure:
-            render_message(failure["message"], len(st.session_state.messages))
+            if not failure.get("saved_in_history"):
+                render_message(failure["message"], len(st.session_state.messages))
             result = failure["result"]
             if result["status"] == "unsupported":
                 st.info(result["error"]["message"])
             else:
                 st.error(result["error"]["message"])
-                if owner is None:
+                if owner is None or mode != "OpenAI AI 답변":
                     if st.button("재시도", key="retry", icon=":material/refresh:"):
                         send_question("", mode, prepared=failure["message"])
                 else:
