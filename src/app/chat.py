@@ -1,6 +1,6 @@
 """Figma chat UI; model and DB contracts stay in chat_service."""
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from html import escape
 from uuid import uuid4
 
@@ -116,6 +116,45 @@ STYLE = """
 .st-key-composer_box [data-testid="stChatInput"] div {padding-top:0!important;padding-bottom:0!important;min-height:0!important;}
 .st-key-composer_box [data-testid="stChatInput"] textarea {height:28px!important;max-height:28px!important;overflow-y:auto!important;}
 .st-key-composer_tools {position:absolute!important;left:12px;right:52px;bottom:3px;padding-right:0!important;width:auto!important;justify-content:space-between!important;}
+
+/* Keep account controls visible; only the conversation list scrolls. */
+[data-testid="stSidebarContent"] {overflow:hidden!important;}
+[data-testid="stSidebarUserContent"] {padding:0 20px 12px!important;}
+.st-key-sidebar_shell {height:calc(100dvh - 76px);min-height:0;gap:14px!important;}
+.st-key-sidebar_header,.st-key-sidebar_footer {flex:0 0 auto;}
+.st-key-sidebar_history {flex:1 1 0!important;min-height:0!important;overflow-y:auto;overflow-x:hidden;
+ scrollbar-width:thin;padding-right:4px;}
+.st-key-sidebar_footer {border-top:1px solid var(--ui-border);padding-top:10px;max-height:55dvh;overflow-y:auto;}
+.st-key-sidebar_history [data-testid="stButton"] button {background:transparent;border-color:transparent;
+ text-align:left;justify-content:flex-start;padding:8px 10px;min-height:40px;}
+.st-key-sidebar_history [data-testid="stButton"] button:hover {background:#E2E8F0;border-color:transparent;}
+.st-key-sidebar_history [data-testid="stButton"] button p {text-align:left;white-space:nowrap;
+ overflow:hidden;text-overflow:ellipsis;display:block;}
+.st-key-sidebar_header [data-testid="stButton"] button {min-height:40px;height:40px;}
+.st-key-sidebar_header [data-testid="stTextInput"] input {background:var(--ui-panel);}
+.st-key-sidebar_footer [data-testid="stVerticalBlock"] {gap:8px;}
+.st-key-sidebar_footer [data-testid="stCaptionContainer"] {font-size:11px;}
+
+.st-key-sidebar_shell {height:calc(100dvh - 88px)!important;min-height:calc(100dvh - 88px)!important;flex:none!important;}
+.st-key-sidebar_shell > [data-testid="stLayoutWrapper"] {flex:0 0 auto!important;min-height:0;}
+.st-key-sidebar_shell > [data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_history) {flex:1 1 0!important;overflow:hidden;}
+.st-key-sidebar_history {height:100%!important;flex:1 1 auto!important;}
+
+/* Compact sidebar width and preserve room for saved conversations. */
+[data-testid="stSidebar"] {width:260px!important;min-width:260px!important;max-width:260px!important;}
+[data-testid="stSidebarUserContent"] {padding:0 12px 12px!important;}
+.st-key-sidebar_shell > [data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_history) {min-height:100px!important;}
+.st-key-sidebar_shell > [data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_footer) {margin-top:auto;}
+.st-key-sidebar_history {min-height:100px!important;}
+.st-key-sidebar_header [data-testid="stButton"] button,
+.st-key-sidebar_footer [data-testid="stButton"] button,
+.st-key-sidebar_footer [data-testid="stPopover"] > button {min-height:40px!important;height:40px!important;}
+
+.st-key-sidebar_header [data-testid="stTextInput"] [data-baseweb="input"],
+.st-key-sidebar_header [data-testid="stTextInput"] input {background:#FFFFFF!important;}
+.st-key-sidebar_header [data-testid="stTextInput"] [data-baseweb="input"] {
+ border:1px solid var(--ui-border)!important;border-radius:12px;}
+.st-key-sidebar_footer {max-height:none;overflow:visible;}
 </style>
 """
 
@@ -237,19 +276,31 @@ def load_saved_conversation(conversation_id):
         return False
 
 
+def history_period(updated):
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    local = timezone(timedelta(hours=9))
+    age = (datetime.now(local).date() - updated.astimezone(local).date()).days
+    return "오늘" if age <= 0 else "지난 7일" if age < 7 else "이전 대화"
+
+
 def render_saved_history(query):
     try:
         with db.db_session() as session:
-            items = [{"id": row.id, "title": row.title or "새 대화"}
+            items = [{"id": row.id, "title": row.title or "새 대화", "updated": row.updated_at}
                      for row in db.list_conversations(session, st.session_state.user_id, limit=100)]
     except Exception:
         st.warning("대화 목록을 불러오지 못했습니다. DB 연결 상태를 확인해 주세요.")
         return
     visible = [item for item in items if query.casefold() in item["title"].casefold()]
-    st.caption("저장된 대화 · 최근 100개")
     if not visible:
         st.caption("아직 저장된 대화가 없어요." if not query else "검색 결과가 없어요.")
+    period = None
     for item in visible:
+        current = history_period(item["updated"])
+        if current != period:
+            st.caption(current)
+            period = current
         if st.button(item["title"], key=f"saved_history_{item['id']}",
                      icon=":material/chat_bubble_outline:", width="stretch"):
             if load_saved_conversation(item["id"]):
@@ -263,66 +314,71 @@ def render_saved_history(query):
 def render_authentication():
     if st.session_state.get("user_id") is not None:
         st.markdown(f"**{escape(st.session_state.get('username', '사용자'))}**")
-        st.caption("OpenAI 대화는 계정에 저장됩니다. 연습·NVIDIA 모드는 현재 접속에서만 유지됩니다.")
+        st.caption("OpenAI 대화는 계정에 저장됩니다.")
         st.button("로그아웃", key="logout", icon=":material/logout:",
                   width="stretch", on_click=logout)
         return
     st.markdown("**게스트**")
-    st.caption("로그인하면 저장된 대화를 다시 열어 이어서 질문할 수 있습니다. 게스트 대화는 계정으로 이전되지 않습니다.")
+    st.caption("로그인하고 이전 대화를 이어가세요.")
     if st.button("로그인 / 회원가입", key="login_open", icon=":material/login:", width="stretch"):
         st.session_state.ui_auth_open = not st.session_state.get("ui_auth_open", False)
-    if not st.session_state.get("ui_auth_open"):
-        return
-    with st.expander("계정 로그인", expanded=True):
-        action = st.radio("계정 메뉴", ["로그인", "회원가입"], key="auth_action", horizontal=True)
-        st.caption("아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상")
-        with st.form("account_form", clear_on_submit=True):
-            username = st.text_input("아이디", key="auth_username", max_chars=30)
-            password = st.text_input("비밀번호", type="password", key="auth_password")
-            confirmation = st.text_input("비밀번호 확인", type="password", key="auth_confirmation") if action == "회원가입" else None
-            submitted = st.form_submit_button(action, type="primary", width="stretch")
-        if submitted:
-            if not username.strip() or not password:
-                st.error("아이디와 비밀번호를 입력해 주세요.")
-                return
-            if action == "회원가입" and password != confirmation:
-                st.error("비밀번호 확인이 일치하지 않습니다.")
-                return
-            try:
-                with db.db_session() as session:
-                    if action == "회원가입":
-                        db.create_user(session, username, password, is_admin=False)
-                        identity = None
-                    else:
-                        user = db.authenticate(session, username, password)
-                        identity = {"id": user.id, "username": user.username} if user else None
-            except db.UsernameTakenError:
-                st.error("이미 사용 중인 아이디입니다.")
-                return
-            except ValueError:
-                st.error("아이디 형식과 비밀번호 길이를 확인해 주세요.")
-                return
-            except Exception:
-                st.error("계정 정보를 확인하지 못했습니다. DB 연결과 테이블 준비 상태를 확인해 주세요.")
-                return
-            if action == "회원가입":
-                st.success("회원가입이 완료되었습니다. 로그인 메뉴에서 로그인해 주세요.")
-            elif identity is None:
-                st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
-            else:
-                # Widget keys are cleared by the form; preserve no password in identity.
-                reset_conversation()
-                st.session_state.ui_history = {}
-                for key in list(st.session_state):
-                    if key.startswith(("env_", "feedback_")):
-                        del st.session_state[key]
-                st.session_state.user_id = identity["id"]
-                st.session_state.username = identity["username"]
-                st.session_state.ui_owner = identity["id"]
-                st.session_state.ui_db_notice = None
-                st.session_state.ui_auth_open = False
-                st.rerun()
-        st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다. 새로고침 후에는 다시 로그인할 수 있습니다.")
+
+
+def close_auth_dialog():
+    st.session_state.ui_auth_open = False
+
+
+@st.dialog("로그인 / 회원가입", width="small", on_dismiss=close_auth_dialog)
+def render_auth_dialog():
+    action = st.radio("계정 메뉴", ["로그인", "회원가입"], key="auth_action", horizontal=True)
+    st.caption("아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상")
+    with st.form("account_form", clear_on_submit=True):
+        username = st.text_input("아이디", key="auth_username", max_chars=30)
+        password = st.text_input("비밀번호", type="password", key="auth_password")
+        confirmation = st.text_input("비밀번호 확인", type="password", key="auth_confirmation") if action == "회원가입" else None
+        submitted = st.form_submit_button(action, type="primary", width="stretch")
+    if submitted:
+        if not username.strip() or not password:
+            st.error("아이디와 비밀번호를 입력해 주세요.")
+            return
+        if action == "회원가입" and password != confirmation:
+            st.error("비밀번호 확인이 일치하지 않습니다.")
+            return
+        try:
+            with db.db_session() as session:
+                if action == "회원가입":
+                    db.create_user(session, username, password, is_admin=False)
+                    identity = None
+                else:
+                    user = db.authenticate(session, username, password)
+                    identity = {"id": user.id, "username": user.username} if user else None
+        except db.UsernameTakenError:
+            st.error("이미 사용 중인 아이디입니다.")
+            return
+        except ValueError:
+            st.error("아이디 형식과 비밀번호 길이를 확인해 주세요.")
+            return
+        except Exception:
+            st.error("계정 정보를 확인하지 못했습니다. DB 연결과 테이블 준비 상태를 확인해 주세요.")
+            return
+        if action == "회원가입":
+            st.success("회원가입이 완료되었습니다. 로그인 메뉴에서 로그인해 주세요.")
+        elif identity is None:
+            st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
+        else:
+            # Widget keys are cleared by the form; preserve no password in identity.
+            reset_conversation()
+            st.session_state.ui_history = {}
+            for key in list(st.session_state):
+                if key.startswith(("env_", "feedback_")):
+                    del st.session_state[key]
+            st.session_state.user_id = identity["id"]
+            st.session_state.username = identity["username"]
+            st.session_state.ui_owner = identity["id"]
+            st.session_state.ui_db_notice = None
+            st.session_state.ui_auth_open = False
+            st.rerun()
+    st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다. 새로고침 후에는 다시 로그인할 수 있습니다.")
 
 
 def remember_conversation(mode):
@@ -343,48 +399,61 @@ def remember_conversation(mode):
 
 
 def render_sidebar():
-    with st.sidebar:
-        st.html(f'<div class="ui-brand"><div class="ui-logo">{icon("terminal",20)}</div>AI 개발 도우미</div>')
-        st.caption("LLM/RAG 개발 오류 분석 및 해결 도우미")
-        st.button("새 대화", icon=":material/add:", type="primary", width="stretch",
-                  key="new_chat", on_click=reset_conversation)
-        query = st.text_input("대화 검색", placeholder="대화 검색", key="history_search", label_visibility="collapsed")
-        if st.session_state.get("user_id") is not None:
-            render_saved_history(query)
-        st.caption("현재 접속의 임시 대화" if st.session_state.get("user_id") is not None else "현재 접속의 대화")
-        items = sorted(st.session_state.ui_history.items(), key=lambda item: item[1]["updated"], reverse=True)
-        visible = [(key, item) for key, item in items if query.casefold() in item["title"].casefold()]
-        if not visible:
-            st.caption("아직 대화가 없어요." if not query else "검색 결과가 없어요.")
-        for key, item in visible:
-            if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch"):
-                st.session_state.messages = deepcopy(item["messages"])
-                st.session_state.conversation_id = item["conversation_id"]
-                st.session_state.ui_thread = key
-                st.session_state.ui_failure = None
-                st.session_state.answer_mode = item["mode"]
-                st.session_state.previous_mode = item["mode"]
-                st.rerun()
-        st.space(24)
-        with st.expander("대화 설정", icon=":material/tune:"):
-            mode = st.selectbox("답변 모드", ["OpenAI AI 답변", "연습 모드", "NVIDIA AI 답변"], key="answer_mode")
-            if mode == "OpenAI AI 답변":
-                st.caption(f"모델: {OPEN_MODEL}")
-            if st.session_state.get("previous_mode", mode) != mode:
-                reset_conversation()
-            st.session_state.previous_mode = mode
-            st.caption("모드를 바꾸면 새 대화를 시작합니다.")
-        with st.expander("디자인 미리보기", icon=":material/visibility:"):
-            st.selectbox("시안 화면", ["실제 채팅", "오류 분석 예시", "추가 정보 요청 예시"], key="ui_preview")
-            st.caption("예시 화면은 API를 호출하거나 대화를 저장하지 않습니다.")
-        with st.expander("현재 사용할 수 있는 기능"):
-            st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석: 준비 중")
-        st.space(24)
-        render_authentication()
-        return mode
+    with st.sidebar, st.container(key="sidebar_shell"):
+        with st.container(key="sidebar_header"):
+            st.html(f'<div class="ui-brand"><div class="ui-logo">{icon("terminal",20)}</div>AI 개발 도우미</div>')
+            st.caption("LLM/RAG 개발 오류 분석 및 해결 도우미")
+            st.button("새 대화", icon=":material/add:", type="primary", width="stretch",
+                      key="new_chat", on_click=reset_conversation)
+            query = st.text_input("대화 검색", placeholder="대화 검색", key="history_search", label_visibility="collapsed")
+        with st.container(key="sidebar_history"):
+            owner = st.session_state.get("user_id")
+            if owner is not None:
+                render_saved_history(query)
+            items = sorted(st.session_state.ui_history.items(), key=lambda item: item[1]["updated"], reverse=True)
+            visible = [(key, item) for key, item in items if query.casefold() in item["title"].casefold()]
+            if owner is not None and visible:
+                st.caption("현재 접속의 임시 대화")
+            if owner is None and not visible:
+                st.caption("아직 대화가 없어요." if not query else "검색 결과가 없어요.")
+            period = None
+            for key, item in visible:
+                current = history_period(item["updated"])
+                if current != period:
+                    st.caption(current)
+                    period = current
+                if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch"):
+                    st.session_state.messages = deepcopy(item["messages"])
+                    st.session_state.conversation_id = item["conversation_id"]
+                    st.session_state.ui_thread = key
+                    st.session_state.ui_failure = None
+                    st.session_state.answer_mode = item["mode"]
+                    st.session_state.previous_mode = item["mode"]
+                    st.rerun()
+        with st.container(key="sidebar_footer"):
+            with st.popover("설정", icon=":material/tune:", width="stretch"):
+                mode = st.selectbox("답변 모드", ["OpenAI AI 답변", "연습 모드", "NVIDIA AI 답변"], key="answer_mode")
+                if mode == "OpenAI AI 답변":
+                    st.caption(f"모델: {OPEN_MODEL}")
+                if st.session_state.get("previous_mode", mode) != mode:
+                    reset_conversation()
+                st.session_state.previous_mode = mode
+                st.caption("모드를 바꾸면 새 대화를 시작합니다. 연습·NVIDIA 대화는 현재 접속에서만 유지됩니다.")
+                with st.expander("디자인 미리보기", icon=":material/visibility:"):
+                    st.selectbox("시안 화면", ["실제 채팅", "오류 분석 예시", "추가 정보 요청 예시"], key="ui_preview")
+                    st.caption("예시 화면은 API를 호출하거나 대화를 저장하지 않습니다.")
+                with st.expander("현재 사용할 수 있는 기능"):
+                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석: 준비 중")
+            render_authentication()
+    return mode
 
 
 def render_welcome():
+    with st.container(key="welcome_intro"):
+        render_welcome_body()
+
+
+def render_welcome_body():
     st.html('''<section class="ui-welcome"><h1>개발 중 막힌 문제를 함께 해결해요.</h1>
     <p>LangChain · LangGraph · MCP의 개발 오류를 함께 살펴봅니다.</p>
     <div class="ui-tags"><span class="ui-tag">LangChain</span><span class="ui-tag">LangGraph</span><span class="ui-tag">MCP</span></div></section>''')
@@ -528,6 +597,8 @@ def render_chat():
     st.session_state.ui_owner = owner
     st.html(STYLE)
     mode = render_sidebar()
+    if st.session_state.get("ui_auth_open") and st.session_state.get("user_id") is None:
+        render_auth_dialog()
     if st.session_state.get("ui_db_notice"):
         st.warning(st.session_state.ui_db_notice)
     preview = st.session_state.ui_preview != "실제 채팅"
@@ -535,32 +606,43 @@ def render_chat():
         st.session_state.messages[0].get("display_content", st.session_state.messages[0]["content"])[:42]
         if st.session_state.messages else "새 대화")
     st.html(f'<div class="ui-header"><div class="ui-header-title">{icon("panel")}{escape(title)}</div><span>{"UI 예시" if preview else "개발 오류 상담"}</span></div>')
-    if preview:
-        render_preview(st.session_state.ui_preview)
-    else:
-        if mode == "연습 모드":
-            st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
+    body = st.empty()
+    with body.container():
+        if preview:
+            render_preview(st.session_state.ui_preview)
         else:
-            st.caption("현재 일반 답변을 제공합니다. 공식 문서 검색·외부 조회·이미지 분석은 준비 중입니다.")
-        if not st.session_state.messages and not st.session_state.ui_failure:
-            render_welcome()
-        for index, message in enumerate(st.session_state.messages):
-            render_message(message, index)
-        failure = st.session_state.ui_failure
-        if failure:
-            if not failure.get("saved_in_history"):
-                render_message(failure["message"], len(st.session_state.messages))
-            result = failure["result"]
-            if result["status"] == "unsupported":
-                st.info(result["error"]["message"])
+            if mode == "연습 모드":
+                st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
-                st.error(result["error"]["message"])
-                if owner is None or mode != "OpenAI AI 답변":
-                    if st.button("재시도", key="retry", icon=":material/refresh:"):
-                        send_question("", mode, prepared=failure["message"])
+                st.caption("현재 일반 답변을 제공합니다. 공식 문서 검색·외부 조회·이미지 분석은 준비 중입니다.")
+            if not st.session_state.messages and not st.session_state.ui_failure:
+                render_welcome()
+            for index, message in enumerate(st.session_state.messages):
+                render_message(message, index)
+            failure = st.session_state.ui_failure
+            if failure:
+                if not failure.get("saved_in_history"):
+                    render_message(failure["message"], len(st.session_state.messages))
+                result = failure["result"]
+                if result["status"] == "unsupported":
+                    st.info(result["error"]["message"])
                 else:
-                    st.caption("질문이 DB에 저장됐을 수 있습니다. 중복 저장 방지를 위해 같은 질문의 자동 재시도는 제공하지 않습니다.")
-            st.caption("입력 내용은 위에 유지됩니다. 실패 안내는 AI 답변으로 저장하지 않습니다.")
+                    st.error(result["error"]["message"])
+                    if owner is None or mode != "OpenAI AI 답변":
+                        if st.button("재시도", key="retry", icon=":material/refresh:"):
+                            send_question("", mode, prepared=failure["message"])
+                    else:
+                        st.caption("질문이 DB에 저장됐을 수 있습니다. 중복 저장 방지를 위해 같은 질문의 자동 재시도는 제공하지 않습니다.")
+                st.caption("입력 내용은 위에 유지됩니다. 실패 안내는 AI 답변으로 저장하지 않습니다.")
     prompt = render_composer(preview)
     if prompt and prompt.strip() and not preview:
-        send_question(prompt.strip(), mode)
+        body.empty()
+        st.html('<style>.st-key-welcome_intro {display:none!important;}</style>')
+        with body.container():
+            for index, message in enumerate(st.session_state.messages):
+                if message["role"] == "user":
+                    render_message(message, index)
+                else:
+                    st.markdown(message["content"])
+            render_message({"role": "user", "content": prompt.strip()}, len(st.session_state.messages))
+            send_question(prompt.strip(), mode)
