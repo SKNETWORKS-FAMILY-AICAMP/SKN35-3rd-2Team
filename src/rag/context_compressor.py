@@ -1,6 +1,6 @@
 from langchain_core.documents import Document
 
-from const.models import create_openai_model
+from src.const.models import create_openai_model
 from src.prompt.context_compressor_prompt import CONTEXT_COMPRESSOR_SYSTEM_PROMPT
 
 model = create_openai_model()

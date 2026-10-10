@@ -1,4 +1,4 @@
-from const.models import create_rerank
+from src.const.models import create_rerank
 
 reranker = create_rerank()
 
