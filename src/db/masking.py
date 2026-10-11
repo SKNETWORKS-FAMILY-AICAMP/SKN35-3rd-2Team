@@ -14,7 +14,6 @@ import re
 
 # (이름, 패턴) — 위에서부터 차례로 적용된다. 이름은 [MASKED:이름]으로 남아 어떤 종류였는지 알 수 있다.
 _RULES: list[tuple[str, re.Pattern]] = [
-    ("private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S)),
     ("nvidia-key", re.compile(r"\bnvapi-[A-Za-z0-9_\-]{20,}")),
     ("github-token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}|\bgithub_pat_[A-Za-z0-9_]{30,}")),
     ("aws-access-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
@@ -27,9 +26,13 @@ _RULES: list[tuple[str, re.Pattern]] = [
 # KEY=value / "key": "value" 형태 (이름에 비밀을 뜻하는 단어가 들어간 경우만 값을 가린다)
 # LLM 개발 질문에는 max_tokens=1500, token_count, tokenizer 같은 코드가 흔해서,
 # "token" 뒤에 s / _count / _limit / _usage / izer가 오면 비밀로 보지 않는다.
+# 이름은 비밀을 뜻하는 단어부터 찾는다. 단어 앞쪽 글자는 매칭에 넣지 않아도 결과 글에 그대로 남는다
+# (앞쪽을 매칭에 넣으면 공백 없이 길게 이어진 글(base64, 압축된 코드 등)에서 시작 위치마다 끝까지 다시 훑어서
+#  글 길이의 제곱만큼 느려진다. 예전에는 16,000자에 7초, 20만 자는 사실상 멈췄다).
+# 단어 뒤쪽 이름 글자는 100자까지만 본다 (같은 이유로 상한이 필요하고, 실제 키 이름은 길어야 50자 안팎이다).
 _ASSIGN = re.compile(
     r"""(?ix)
-    (?P<name>[A-Za-z0-9_\-]*(?:password|passwd|secret|api[_\-]?key|access[_\-]?key|token(?!s\b|s_|_count|_limit|_usage|_len|izer))[A-Za-z0-9_\-]*)
+    (?P<name>(?:password|passwd|secret|api[_\-]?key|access[_\-]?key|token(?!s\b|s_|_count|_limit|_usage|_len|izer))[A-Za-z0-9_\-]{0,100})
     (?P<sep>["']?\s*[:=]\s*["']?)
     (?P<value>[^\s"',;]{4,})
     """
@@ -48,9 +51,34 @@ def _looks_like_code_or_placeholder(value: str) -> bool:
     )
 
 
+# 비밀키 블록(PEM)은 시작 표시부터 끝 표시까지 통째로 가린다.
+# 하나의 정규식(.*?)으로 쓰면 끝 표시가 없는 글에서 시작 표시마다 글 끝까지 다시 훑어 느려지므로 직접 짝을 맞춘다.
+_PEM_BEGIN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+_PEM_END = re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
+
+
+def _mask_private_keys(text: str) -> str:
+    parts: list[str] = []
+    pos = 0
+    while True:
+        begin = _PEM_BEGIN.search(text, pos)
+        if begin is None:
+            break
+        end = _PEM_END.search(text, begin.end())
+        if end is None:
+            break  # 뒤에 끝 표시가 하나도 없으면, 이후의 시작 표시도 짝이 없다
+        parts.append(text[pos : begin.start()])
+        parts.append("[MASKED:private-key]")
+        pos = end.end()
+    parts.append(text[pos:])
+    return "".join(parts)
+
+
 def mask_secrets(text: str) -> str:
     if not text:
         return text
+
+    text = _mask_private_keys(text)
 
     for name, pattern in _RULES:
         if name == "bearer-token":

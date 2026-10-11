@@ -61,6 +61,53 @@ def test_normal_text_and_code_are_left_alone(text):
     assert mask_secrets(text) == text
 
 
+@pytest.mark.parametrize("prefix_len", [10, 59, 61, 200])
+def test_very_long_key_name_prefix_is_still_masked(prefix_len):
+    out = mask_secrets("A" * prefix_len + "_PASSWORD=hunter2abc")
+    assert "hunter2abc" not in out and out.startswith("A" * prefix_len + "_PASSWORD=")
+
+
+@pytest.mark.parametrize("suffix_len", [10, 99])  # 단어(PASSWORD) 뒤 이름 글자는 "_"를 포함해 100자까지 본다
+def test_long_key_name_suffix_is_masked_up_to_limit(suffix_len):
+    out = mask_secrets("PASSWORD_" + "B" * suffix_len + "=hunter2abc")
+    assert "hunter2abc" not in out
+
+
+LONG = 200_000  # MESSAGE_MAX_CHARS 상한과 같은 길이
+PEM_BEGIN = "-----BEGIN RSA " + "PRIVATE KEY-----"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "x" * LONG,                          # 공백 없이 이어진 글자 (base64, 압축된 코드 등)
+        "0123456789" * (LONG // 10),
+        "a-b_" * (LONG // 4),
+        "token " * (LONG // 6),              # 키워드가 계속 반복되는 글
+        "password" * (LONG // 8),
+        "api_key=" * (LONG // 8),
+        "DB_PASSWORD" + "_" * LONG,
+        "://" + "a:" * (LONG // 2),
+        PEM_BEGIN * (LONG // len(PEM_BEGIN)),  # 시작 표시만 있고 끝 표시가 없는 경우
+    ],
+    ids=["letters", "digits", "dashes", "token-words", "password-run", "api_key-run", "long-name", "url-colons", "pem-begin"],
+)
+def test_masking_stays_fast_on_long_adversarial_text(text):
+    """예전 정규식은 이런 글에서 길이의 제곱만큼 느려졌다 (16,000자에 7초)."""
+    import time
+
+    started = time.perf_counter()
+    mask_secrets(text)
+    assert time.perf_counter() - started < 3.0  # 지금은 가장 느린 경우도 1초 안팎. 제곱으로 느려지면 몇 분이 걸린다
+
+
+def test_secret_deep_inside_long_text_is_still_masked():
+    filler = "정상적인 문장입니다. " * 20_000
+    out = mask_secrets(filler + "password=hunter2abc " + filler)
+    assert "hunter2abc" not in out
+    assert out.count("정상적인 문장입니다.") == 40_000  # 주변 문장은 그대로
+
+
 def test_masking_is_idempotent():
     once = mask_secrets(f"key={NV} password=hunter2abc")
     assert mask_secrets(once) == once
