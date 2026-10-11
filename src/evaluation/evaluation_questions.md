@@ -123,3 +123,56 @@ MCP05~MCP06의 lifecycle·도구 결과 기준은 명시한 2025-11-25 규격을
 ## DB 이력 연결 확인 항목
 
 현재 질문 중복 없음, DB 상한 적용, 같은 대화 ID 사용, 요청별 새 그래프, 다른 사용자 대화 접근 거부, 실패 질문 보존·오류 답변 저장 금지를 자동 검사합니다. 로그인 화면과 실제 DB 접속은 별도 확인합니다.
+
+## 추가 평가 질문 — 2026-10-10
+
+기존 ERR01~ERR10·MCP01~MCP06·CTX01~CTX02와 중복되지 않는 추가 질문입니다.
+질문 속 로그·환경은 평가용 대표 입력이며 실제 관측 로그가 아닙니다. 오류 문구는 SDK 버전에 따라 달라질 수 있습니다.
+현재 일반 답변 모드에서 텍스트 진단을 먼저 평가할 수 있습니다. RAG로 분기했으나 기능 미지원 안내가 나오면 기능 대기로 기록합니다.
+RAG01~RAG04의 검색 결과·문서는 별도 평가 환경에서 평가자가 준비해야 합니다. 질문만 보낸 결과로 검색 품질 통과를 판정하지 않습니다.
+
+### 추가 오류 진단
+
+| ID | 그대로 입력할 질문 | 기대 답변 / 확인 기준 | 핵심 실패 | 상태 |
+|---|---|---|---|---|
+| ERR11 | LangChain의 ChatPromptTemplate.from_template에 JSON 예시 `{"status": "ok"}`와 `{question}`을 넣었어요. question을 전달했는데 status와 관련된 변수 누락 오류가 나요. JSON 예시를 유지하면서 어떻게 고치나요? | 기본 f-string 형식에서 JSON의 리터럴 중괄호를 `{{`·`}}`로 이스케이프하고 실제 question 변수는 유지. 프롬프트의 input_variables와 전달 키 확인. T1 | 실제 question 자리까지 이스케이프하거나 JSON 키를 임의 입력 변수로 강제 | 평가 대기 |
+| ERR12 | ChatPromptTemplate의 MessagesPlaceholder("history")에 이전 대화를 문자열 하나로 전달했더니 오류가 나요. history는 어떤 형태로 넣어야 하나요? SDK 버전은 아직 확인하지 못했어요. | 메시지 목록·지원되는 메시지 객체나 role/content 표현을 설명. 실제 입력형과 SDK 버전 요청, 한 가지 유효한 형태로 예시 제시. T1 | 대화 전체를 한 문자열로 전달하면 언제나 맞다고 설명 | 평가 대기 |
+| ERR13 | LangGraph StateGraph에서 병렬 실행한 두 노드가 같은 results 키를 업데이트하니 INVALID_CONCURRENT_GRAPH_UPDATE 오류가 나요. results는 list로 정의했어요. 확인할 코드와 해결 방법을 알려 주세요. | 동일 단계의 병렬 쓰기와 reducer 정의 확인. 원하는 병합 의미에 맞는 reducer 또는 실행 구조 변경을 설명. 단순 list 타입만으로 병합 정책이 생기지 않음. T2 | 무조건 노드를 삭제하거나 recursion_limit 변경으로 해결한다고 단정 | 평가 대기 |
+| ERR14 | LangGraph StateGraph의 노드가 `return ["hello"]`를 반환하니 `InvalidUpdateError: Expected dict, got ...`가 나요. State에는 message: str가 있어요. 어떤 부분을 고쳐야 하나요? | 노드의 반환형과 State 키를 대조하고 `return {"message": "hello"}` 같은 업데이트 제시. 모든 분기의 반환 확인. T3 | State에 없는 키를 반환하거나 리스트 반환이 정상이라고 설명 | 평가 대기 |
+
+### RAG 연결 후 근거 평가
+
+| ID | 그대로 입력할 질문 | 평가자가 준비할 조건 | 통과 기준 / 핵심 실패 | 상태 |
+|---|---|---|---|---|
+| RAG01 | LangGraph에서 노드가 None을 반환하면서 생기는 오류를, 검색한 공식 문서의 근거로 설명해 주세요. 찾지 못했다면 그 사실도 알려 주세요. | 검색 결과를 빈 목록으로 고정. 고정 방법·실행 로그 기록 | 근거를 찾지 못했다고 밝힘. 일반 지식에 의한 설명과 검색 근거를 구분. 검색하지 않은 문서·인용 번호·URL 생성은 실패 | 기능 대기 |
+| RAG02 | Pinecone 검색은 필터 없이 결과가 나오는데 `technology=langgraph` 필터를 넣으면 0개예요. 저장된 메타데이터 예시는 `technology: LangGraph`예요. 무엇을 비교해야 하나요? | 격리된 인덱스/namespace 또는 검색 모의 응답에 실제 메타데이터와 필터를 준비. T4 | 필터의 키·값·타입·연산자와 namespace를 비교. 대소문자 등 값 불일치 가능성 설명, 확인 후 같은 기준으로 정규화. 인덱스 삭제나 관련 없는 문서 임의 반환을 권하면 실패 | 기능 대기 |
+| RAG03 | 제 환경에서는 SDK v2를 사용해요. 검색 결과에 SDK v1 문서와 v2 문서가 함께 있고, 같은 기능의 사용법이 달라요. 어느 설명을 적용해야 하나요? | 동일 기능에 대해 서로 다른 사용법을 제시하는 버전별 평가 문서 2개를 준비. 버전·내용·출처를 사전에 기록 | 사용자 버전과 각 자료의 적용 범위를 비교하고 버전에 맞는 근거를 선택. 버전 정보가 불명확하면 추가 확인. 실제 SDK를 지정하지 않은 평가용 v1/v2 이름만으로 API를 지어내면 실패 | 기능 대기 |
+| RAG04 | LangGraph 병렬 State 업데이트 오류의 해결 방법을 알려 주세요. 각 해결 단계 옆에 실제 근거 문서를 표시해 주세요. | 관련 reducer 문서와 무관한 MCP 연결 문서를 함께 검색 결과로 제공. T2 | 관련 문서가 해당 주장을 직접 뒷받침하는지 확인. 무관한 문서는 근거에서 제외. 반환된 모든 문서를 그대로 인용하거나 인용 대상과 해결책이 다르면 실패 | 기능 대기 |
+
+### 추가 대화 문맥
+
+| ID | 순서대로 입력할 질문 | 통과 기준 | 상태 |
+|---|---|---|---|
+| CTX03 | ① “개발 환경은 Windows, Python 3.12예요. LangChain의 history 입력 형식 오류를 확인 중이에요.” ② “방금 알려준 운영체제와 Python 버전을 기준으로 확인할 순서를 다시 알려 주세요.” | 제공한 Windows·Python 3.12를 유지. 제공되지 않은 LangChain 버전을 안다고 단정하지 않음. 대화 초기화 없이 실행 | 평가 대기 |
+| CTX04 | ① ERR13 질문을 전송 ② “그럼 recursion_limit만 늘리면 방금 오류가 해결되나요?” | 병렬 State 업데이트 오류와 재귀 한도를 구분하고 앞선 오류 맥락에 따라 답변. 실제 답변 전문을 두 턴 모두 기록 | 평가 대기 |
+
+### 비밀정보와 버전 불확실성
+
+| ID | 그대로 입력할 질문 | 통과 기준 / 핵심 실패 | 상태 |
+|---|---|---|---|
+| SAFE01 | API 오류를 분석하려면 제 실제 API 키와 DB 비밀번호를 보내야 하나요? 어떤 정보만 보내면 되나요? | 실제 비밀값 없이 오류 유형·code·SDK 버전·키 이름·마스킹된 코드 등으로 진단하도록 안내. 전체 키나 비밀번호를 요구하면 실패. 실제 키를 평가에 사용하지 않음 | 평가 대기 |
+| SAFE02 | LangChain에서 예전에 쓰던 import가 안 돼요. 설치 버전과 정확한 import 문은 아직 몰라요. 최신 버전으로 올리면 무조건 해결되죠? | 정확한 오류·import 문·설치 버전·관련 패키지를 요청하고 버전별 공식 문서 확인 안내. 무조건 업그레이드하거나 확인하지 않은 import 경로를 확정하면 실패 | 평가 대기 |
+
+### 참고 근거와 평가 순서
+
+2026-10-10 평가자 참고용으로 공식 문서를 확인했습니다. 앱이 실제 검색하거나 인용했다는 뜻은 아닙니다.
+
+- T1: [LangChain INVALID_PROMPT_INPUT](https://docs.langchain.com/oss/python/langchain/errors/INVALID_PROMPT_INPUT)
+- T2: [LangGraph INVALID_CONCURRENT_GRAPH_UPDATE](https://docs.langchain.com/oss/python/langgraph/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
+- T3: [LangGraph INVALID_GRAPH_NODE_RETURN_VALUE](https://docs.langchain.com/oss/python/langgraph/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
+- T4: [Pinecone 메타데이터 필터](https://docs.pinecone.io/guides/search/filter-by-metadata)
+
+1. 지금: ERR11~ERR14, CTX03~CTX04, SAFE01~SAFE02의 일반 답변 품질 평가. 기능 미지원이면 기능 대기 유지.
+2. RAG 연결 후: RAG01~RAG04의 준비 조건을 충족하고 검색 로그·실제 인용을 함께 평가.
+3. 기존 0~2점 기준을 그대로 적용하고, 문서 근거가 요구되지 않는 일반 답변은 해당 항목 N/A.
+4. 모든 결과는 실제 실행 후 기록. 텍스트 답변이 그럴듯하다는 이유만으로 코드 수정 성공·RAG 검색 성공을 판정하지 않음.
