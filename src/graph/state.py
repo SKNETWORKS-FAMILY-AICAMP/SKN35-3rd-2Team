@@ -16,6 +16,8 @@ class State(MessagesState):
     route: NotRequired[str]
     reason: NotRequired[str]
 
+    completed_routes: NotRequired[list[str]]
+
     answer: NotRequired[str]
 
 
@@ -26,3 +28,4 @@ class RAGState(MessagesState):
     context: NotRequired[str]
     multi_questions: NotRequired[list[str]]
     multi_questions_documents: NotRequired[list[list[Document]]]
+    retry: NotRequired[int]

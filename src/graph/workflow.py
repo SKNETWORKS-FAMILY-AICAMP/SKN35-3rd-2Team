@@ -3,7 +3,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src.agent.answer_agent import answer_agent
 from src.agent.general_agent import general_agent
-from src.agent.rag_agent import rag_agent
+from src.agent.rag_agent import rag_node
 from src.graph.node.supervisor_node import supervisor_node
 from src.graph.state import State
 
@@ -21,7 +21,7 @@ def workflow():
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("general", general_agent())
     builder.add_node("answer", answer_agent())
-    builder.add_node("rag", rag_agent())
+    builder.add_node("rag", rag_node)
     builder.add_edge(START, "supervisor")
 
     builder.add_conditional_edges(
@@ -30,9 +30,11 @@ def workflow():
         {"rag": "rag", "general": "general", "answer": "answer"},
     )
 
+    builder.add_edge("rag", "supervisor")
+
     builder.add_edge("general", END)
     builder.add_edge("answer", END)
-    builder.add_edge("rag", END)
+
     memory = InMemorySaver()
 
     graph = builder.compile(checkpointer=memory)
@@ -47,10 +49,15 @@ if __name__ == "__main__":
 
     result = graph.invoke(
         {
-            "messages": [{"role": "user", "content": "코딩 잘하는 법 알려줘."}],
-            "original_question": "코딩 잘하는 법 알려줘.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition이 나와요. 원인과 해결 방법 알려줘",
+                }
+            ],
+            "original_question": "GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition이 나와요. 원인과 해결 방법 알려줘",
         },
         config=config,
     )
 
-    print("최종 답변 : ", result)
+    print("최종 답변 : ", result["messages"][-1].content)
