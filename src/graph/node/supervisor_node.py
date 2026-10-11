@@ -39,6 +39,7 @@ def supervisor_node(state):
                         "image_analysis": state.get("image_analysis"),
                         "retrieved_docs": state.get("retrieved_docs"),
                         "mcp_results": state.get("mcp_results"),
+                        "completed_routes": state.get("completed_routes"),
                     }
                 ),
             },

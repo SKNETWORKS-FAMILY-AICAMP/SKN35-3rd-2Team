@@ -1,5 +1,4 @@
-def CONTEXT_COMPRESSOR_SYSTEM_PROMPT(content):
-    return f"""
+CONTEXT_COMPRESSOR_SYSTEM_PROMPT = """
             당신은 문서 컨텍스트 압축 전문가입니다.
 
             사용자의 질문에 답하는 데 필요한 정보만 문서에서 추출하세요.
@@ -13,8 +12,4 @@ def CONTEXT_COMPRESSOR_SYSTEM_PROMPT(content):
             4. 관련 여부가 애매하면 문서를 포함하세요.
             5. 관련 내용이 전혀 없다면 정확히 "관련 내용 없음"만 출력하세요.
             6. 출처는 제공된 문서 메타데이터를 기준으로 표시하세요. 없는 정보는 만들지 마세요.
-
-            ## 검색된 문서
-
-            {content}
             """
