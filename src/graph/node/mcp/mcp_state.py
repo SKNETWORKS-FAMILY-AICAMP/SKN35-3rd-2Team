@@ -15,6 +15,8 @@ from langgraph.graph import MessagesState
 
 class MCPState(MessagesState):
     original_question: str
+    # 멀티모달 노드가 이미지에서 읽은 글. 이미지로 올린 오류 화면은 오류 문구가 질문이 아니라 여기에만 있어서, 도구를 고를 때 함께 본다
+    image_analysis: NotRequired[str]
     mcp_results: NotRequired[list]  # 결과. 부모 State.mcp_results로 돌아간다 (기존 항목 뒤에 이어 붙인다)
 
     mcp_tools: NotRequired[list[dict]]  # 쓸 수 있는 도구: {"server", "name", "display_name", "description", "input_schema"}

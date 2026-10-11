@@ -4,13 +4,18 @@ MCP 에이전트(src/agent/mcp_agent.py)와 노드 시험. 모델과 서버는 �
 """
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
 
-from src.agent.mcp_agent import mcp_agent, route_on_error
+import src.agent.mcp_agent as agent_module
+from src.agent.mcp_agent import mcp_agent, mcp_node, route_on_error
 from src.const import mcp_config as cfg
+from src.const.multimodal_config import NO_IMAGE_NOTICE
 from src.graph.node.mcp import call_tool_node as call_module
 from src.graph.node.mcp import list_tools_node as list_module
 from src.graph.node.mcp import select_tool_node as select_module
 from src.graph.node.mcp.list_tools_node import assign_display_names
+from src.graph.state import State
 
 REPEAT_SCHEMA = {
     "type": "object",
@@ -247,3 +252,120 @@ def test_route_on_error_rules():
     assert route_on_error({"mcp_error": retryable, "mcp_attempts": 1}) == "select_tool"
     assert route_on_error({"mcp_error": retryable, "mcp_attempts": cfg.MAX_ATTEMPTS}) == "format_results"
     assert route_on_error({"mcp_error": fatal, "mcp_attempts": 1}) == "format_results"
+
+
+# ---------------------------------------------------------------- 이미지에서 읽은 글을 도구 선택에 반영
+IMAGE_TEXT = (
+    "[오류 메시지]\n"
+    "langgraph.errors.GraphRecursionError: Recursion limit of 25 reached\n"
+    "[환경 정보]\n"
+    "langgraph==0.6.4"
+)
+
+
+def user_prompt(model, index=0):
+    return model.seen[index][1]["content"]
+
+
+def test_image_analysis_is_shown_when_choosing_the_tool(env):
+    model, _ = env([pick(text="hi", times=3)], [OK])
+    run("이 오류 해결해줘", image_analysis=IMAGE_TEXT)
+    prompt = user_prompt(model)
+    assert prompt.startswith("사용자의 질문: 이 오류 해결해줘")
+    assert "이미지에서 읽은 내용:" in prompt and "GraphRecursionError" in prompt and "langgraph==0.6.4" in prompt
+
+
+@pytest.mark.parametrize("image_analysis", ["", "   ", NO_IMAGE_NOTICE, None])
+def test_no_image_text_is_left_out(env, image_analysis):
+    model, _ = env([pick(text="hi", times=3)], [OK])
+    run("hi를 3번 반복해줘", image_analysis=image_analysis) if image_analysis is not None else run("hi를 3번 반복해줘")
+    assert "이미지에서 읽은 내용" not in user_prompt(model)
+
+
+def test_long_image_text_is_clipped(env):
+    model, _ = env([pick(text="hi", times=3)], [OK])
+    run("q", image_analysis="가" * (cfg.IMAGE_CONTEXT_MAX_CHARS * 2))
+    prompt = user_prompt(model)
+    assert prompt.endswith(cfg.CLIP_SUFFIX) and len(prompt) < cfg.IMAGE_CONTEXT_MAX_CHARS + 300
+
+
+def test_image_text_is_kept_when_choosing_again_after_a_failure(env):
+    model, _ = env([pick(text="hi", times=10), pick(text="hi", times=5)], [TOO_MANY, OK])
+    run(image_analysis=IMAGE_TEXT)
+    assert "GraphRecursionError" in user_prompt(model, 1) and "앞선 시도가 실패했다" in user_prompt(model, 1)
+
+
+# ---------------------------------------------------------------- mcp_node (메인 그래프에 붙이는 노드)
+def parent_state(**extra):
+    return {"messages": [{"role": "user", "content": "q"}], "original_question": "hi를 3번 반복해줘", **extra}
+
+
+def test_mcp_node_returns_only_mcp_results_and_keeps_earlier_ones(env):
+    env([pick(text="hi", times=3)], [OK])
+    earlier = {"status": "success", "tool": "earlier"}
+    out = mcp_node(parent_state(mcp_results=[earlier]))
+    assert list(out) == ["mcp_results"]  # 부모로는 이것 하나만 돌려준다
+    assert out["mcp_results"][0] == earlier and out["mcp_results"][1]["status"] == cfg.STATUS_SUCCESS
+
+
+def test_mcp_node_passes_the_image_text_to_the_agent(env):
+    model, _ = env([pick(text="hi", times=3)], [OK])
+    mcp_node(parent_state(image_analysis=IMAGE_TEXT))
+    assert "GraphRecursionError" in user_prompt(model)
+
+
+def test_mcp_node_works_with_a_minimal_state(env):
+    env([None])
+    out = mcp_node({"messages": [], "original_question": "점심 뭐 먹지?"})
+    assert out["mcp_results"][-1]["status"] == cfg.STATUS_NO_TOOL
+
+
+def test_mcp_node_turns_an_unexpected_error_into_a_failed_result(env, monkeypatch):
+    env([])
+
+    def broken(state):
+        raise RuntimeError("unexpected bug api_key=sk-" + "Q" * 30)
+
+    monkeypatch.setattr(agent_module, "list_tools_node", broken)
+    earlier = {"status": "success", "tool": "earlier"}
+    out = mcp_node(parent_state(mcp_results=[earlier]))  # 예외를 던지지 않는다
+    record = out["mcp_results"][-1]
+    assert out["mcp_results"][0] == earlier and record["status"] == cfg.STATUS_FAILED
+    assert "RuntimeError" in record["error"] and "Q" * 30 not in record["error"]  # 오류 문구의 비밀값은 가린다
+    assert record["note"] == cfg.FAILED_NOTE and record["called_at"]
+
+
+def main_graph():
+    """workflow.py가 하게 될 연결 방식: add_node("mcp", mcp_node) + add_edge("mcp", "supervisor")."""
+
+    def supervisor(state):
+        return {"route": "answer" if state.get("mcp_results") else "mcp"}
+
+    def answer(state):
+        return {"answer": "final answer produced"}
+
+    builder = StateGraph(State)
+    builder.add_node("supervisor", supervisor)
+    builder.add_node("answer", answer)
+    builder.add_node("mcp", mcp_node)
+    builder.add_edge(START, "supervisor")
+    builder.add_conditional_edges("supervisor", lambda s: s["route"], {"mcp": "mcp", "answer": "answer"})
+    builder.add_edge("mcp", "supervisor")
+    builder.add_edge("answer", END)
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+def test_main_graph_reaches_answer_with_mcp_results(env):
+    env([pick(text="hi", times=3)], [OK])
+    result = main_graph().invoke(parent_state(mcp_results=[]), config={"configurable": {"thread_id": "t"}})
+    assert result["answer"] == "final answer produced"
+    assert result["mcp_results"][-1]["content"] == "hi hi hi"
+    assert not {"mcp_tools", "mcp_call", "mcp_attempts", "mcp_failures", "mcp_error", "mcp_outcome"} & set(result)  # 내부 값은 새지 않는다
+
+
+def test_main_graph_still_answers_when_mcp_breaks_unexpectedly(env, monkeypatch):
+    env([])
+    monkeypatch.setattr(agent_module, "list_tools_node", lambda state: (_ for _ in ()).throw(RuntimeError("boom")))
+    result = main_graph().invoke(parent_state(mcp_results=[]), config={"configurable": {"thread_id": "t"}})
+    assert result["answer"] == "final answer produced"  # MCP가 망가져도 질문 전체가 실패하지 않는다
+    assert result["mcp_results"][-1]["status"] == cfg.STATUS_FAILED
