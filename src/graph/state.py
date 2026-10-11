@@ -28,4 +28,4 @@ class RAGState(MessagesState):
     context: NotRequired[str]
     multi_questions: NotRequired[list[str]]
     multi_questions_documents: NotRequired[list[list[Document]]]
-    retry: NotRequired[int]
+    retry_count: NotRequired[int]

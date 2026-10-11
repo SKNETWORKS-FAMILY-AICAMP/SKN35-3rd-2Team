@@ -13,8 +13,12 @@ from src.graph.state import RAGState, State
 
 def route_after_rerank(state: RAGState) -> str:
     print("route_after_rerank 진입 ", end="\n\n")
+
     documents = state.get("documents", [])
     retry_count = state.get("retry_count", 0)
+
+    print("retry_count : ", retry_count, end="\n\n")
+
     retries_left = retry_count < MAX_RETRY
 
     scores = [
@@ -22,6 +26,7 @@ def route_after_rerank(state: RAGState) -> str:
         for doc in documents
         if "rerank_score" in doc.metadata
     ]
+    print("scores : ", scores, end="\n\n")
     top_score = max(scores) if scores else None
 
     result = "give_up"
@@ -80,7 +85,6 @@ def rag_node(state: State):
             "original_question": state["original_question"],
             "retry_count": 0,
         },
-        config={"recursion_limit": 50},
     )
 
     return {
