@@ -47,6 +47,7 @@ MAX_ATTEMPTS = 3
 
 SELECT_TEMPERATURE = 0.0  # 도구 선택은 매번 같은 결과가 나와야 하므로 0
 SELECT_TIMEOUT_SECONDS = 60
+IMAGE_CONTEXT_MAX_CHARS = 4_000  # 도구를 고를 때 함께 보여 주는 "이미지에서 읽은 내용"의 최대 글자 수
 
 # ---------------------------------------------------------------------------
 # 서버 호출
@@ -60,6 +61,42 @@ CALL_TOOL_TIMEOUT_SECONDS = 30  # 도구 한 번 호출의 시간 제한
 # 도구가 돌려준 글이 이보다 길면 잘라서 State에 담는다 (answer 노드의 토큰이 커지는 것을 막는다)
 MAX_RESULT_CHARS = 8_000
 CLIP_SUFFIX = " …(이하 생략)"
+
+# ---------------------------------------------------------------------------
+# 우리 MCP 서버의 도구들 (src/mcp_integration/server/tools)
+# 토큰 없이 공개 API를 쓴다. GitHub는 토큰이 없으면 시간당 60번, 검색은 분당 10번까지다 (IP 기준, 2026-10 확인).
+# 같은 와이파이를 여러 명이 쓰는 시연에서는 금방 찰 수 있어서, 같은 요청은 몇 분간 기억해 둔다.
+# ---------------------------------------------------------------------------
+HTTP_USER_AGENT = "skn35-dev-helper-mcp/1.0"
+HTTP_TIMEOUT_SECONDS = 15
+HTTP_CACHE_SECONDS = 300
+
+# 이슈를 조회할 수 있는 저장소 (도구가 엉뚱한 저장소를 검색하거나 요청 제한을 낭비하지 않게 허용 목록으로 둔다)
+GITHUB_ALLOWED_REPOS = (
+    "langchain-ai/langchain",
+    "langchain-ai/langgraph",
+    "modelcontextprotocol/python-sdk",
+)
+GITHUB_SEARCH_DEFAULT_RESULTS = 5
+GITHUB_SEARCH_MAX_RESULTS = 10
+GITHUB_SNIPPET_CHARS = 300  # 검색 결과 한 건의 본문 발췌 길이
+GITHUB_ISSUE_BODY_CHARS = 2_500
+GITHUB_COMMENT_CHARS = 1_200
+GITHUB_MAX_COMMENTS = 10
+
+VERSION_RECENT_COUNT = 5  # 최신 버전 조회에서 함께 보여 주는 최근 버전 수
+COMPAT_MAX_PACKAGES = 10  # 호환성 점검에 한 번에 넣을 수 있는 패키지 수
+
+# 심볼 존재 확인에서 불러와도 되는 패키지 (임의의 모듈을 불러오면 그 모듈의 코드가 실행되므로 허용 목록으로 제한한다)
+SYMBOL_ALLOWED_PACKAGES = (
+    "langchain",
+    "langchain_core",
+    "langchain_openai",
+    "langchain_community",
+    "langgraph",
+    "mcp",
+)
+SYMBOL_SIMILAR_COUNT = 3
 
 # ---------------------------------------------------------------------------
 # 결과 상태 (State.mcp_results의 각 항목 "status")

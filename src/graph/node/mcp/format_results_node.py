@@ -29,6 +29,21 @@ def _clean(text: str) -> str:
     return mask_secrets(text)
 
 
+def failed_record(error: str, *, tool: str | None = None, arguments: dict | None = None, attempts: int = 0) -> dict:
+    """"실패" 결과 한 건. 이 노드와, 예상 못 한 오류를 잡아서 실패로 바꾸는 mcp_node(src/agent/mcp_agent.py)가 같이 쓴다."""
+    return {
+        "status": cfg.STATUS_FAILED,
+        "tool": tool,
+        "server": None,
+        "arguments": arguments,
+        "content": "",
+        "error": _clean(error),
+        "attempts": attempts,
+        "called_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "note": cfg.FAILED_NOTE,
+    }
+
+
 def format_results_node(state):
     results = list(state.get("mcp_results") or [])
     failures = state.get("mcp_failures") or []
@@ -51,17 +66,12 @@ def format_results_node(state):
         }
     elif failures or (error and error["kind"] != "no_tool"):
         last = failures[-1] if failures else None
-        record = {
-            "status": cfg.STATUS_FAILED,
-            "tool": last["tool"] if last else None,
-            "server": None,
-            "arguments": last["arguments"] if last else None,
-            "content": "",
-            "error": _clean(last["message"] if last else error["message"]),
-            "attempts": attempts,
-            "called_at": now,
-            "note": cfg.FAILED_NOTE,
-        }
+        record = failed_record(
+            last["message"] if last else error["message"],
+            tool=last["tool"] if last else None,
+            arguments=last["arguments"] if last else None,
+            attempts=attempts,
+        )
     else:
         record = {
             "status": cfg.STATUS_NO_TOOL,
