@@ -93,12 +93,27 @@ PEM_BEGIN = "-----BEGIN RSA " + "PRIVATE KEY-----"
     ids=["letters", "digits", "dashes", "token-words", "password-run", "api_key-run", "long-name", "url-colons", "pem-begin"],
 )
 def test_masking_stays_fast_on_long_adversarial_text(text):
-    """예전 정규식은 이런 글에서 길이의 제곱만큼 느려졌다 (16,000자에 7초)."""
-    import time
+    """예전 정규식은 이런 글에서 길이의 제곱만큼 느려졌다 (16,000자에 7초, 20만 자는 사실상 멈춤).
 
-    started = time.perf_counter()
-    mask_secrets(text)
-    assert time.perf_counter() - started < 3.0  # 지금은 가장 느린 경우도 1초 안팎. 제곱으로 느려지면 몇 분이 걸린다
+    정규식 계산은 같은 프로세스 안에서는 중간에 끊을 수 없어서, 별도 프로세스에서 시간 제한을 두고 돌린다.
+    이렇게 하면 수정이 다시 사라져도 전체 시험이 멈추지 않고 이 시험만 실패한다 (실제로 한 번 병합 중에 수정이 되돌려져 시험이 4분 넘게 멈췄다).
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    module = Path(__file__).resolve().parents[2] / "src" / "db" / "masking.py"
+    code = (
+        "import importlib.util, sys; "
+        f"spec = importlib.util.spec_from_file_location('masking', {str(module)!r}); "
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "  # src.db 패키지 전체(sqlalchemy 등)를 불러오지 않으려고 파일을 직접 읽는다
+        "m.mask_secrets(sys.stdin.read())"
+    )
+    try:
+        done = subprocess.run([sys.executable, "-c", code], input=text, text=True, capture_output=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        pytest.fail("mask_secrets가 15초 안에 끝나지 않았습니다 (정규식이 글 길이의 제곱으로 느려졌을 가능성이 큽니다).")
+    assert done.returncode == 0, done.stderr[-300:]
 
 
 def test_secret_deep_inside_long_text_is_still_masked():
