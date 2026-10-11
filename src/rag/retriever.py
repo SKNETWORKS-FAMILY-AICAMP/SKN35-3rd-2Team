@@ -81,7 +81,7 @@ def create_pinecone_index():
         pc.create_index(
             name=PINECONE_INDEX_NAME,
             dimension=DENSE_DIMENSION,
-            metric="dotproduct",          # Hybrid(Dense + Sparse) 검색은 dotproduct 만 지원
+            metric="dotproduct",  # Hybrid(Dense + Sparse) 검색은 dotproduct 만 지원
             spec=ServerlessSpec(
                 cloud=CLOUD,
                 region=REGION,
@@ -93,7 +93,10 @@ def create_pinecone_index():
     else:
         description = pc.describe_index(PINECONE_INDEX_NAME)
 
-        if description.metric != "dotproduct" or description.dimension != DENSE_DIMENSION:
+        if (
+            description.metric != "dotproduct"
+            or description.dimension != DENSE_DIMENSION
+        ):
             raise RuntimeError(
                 f"기존 인덱스 '{PINECONE_INDEX_NAME}' 는 metric={description.metric}, "
                 f"dimension={description.dimension} 입니다. Hybrid 검색에는 metric=dotproduct, "
@@ -125,12 +128,16 @@ def create_bm25_encoder(documents: list[Document]) -> BM25Encoder:
 @lru_cache(maxsize=1)
 def load_bm25_encoder() -> BM25Encoder:
     if not BM25_PATH.exists():
-        raise FileNotFoundError(f"{BM25_PATH} 가 없습니다. 먼저 python -m src.vectorstore.build 를 실행하세요.")
+        raise FileNotFoundError(
+            f"{BM25_PATH} 가 없습니다. 먼저 python -m src.vectorstore.build 를 실행하세요."
+        )
 
     return BM25Encoder().load(str(BM25_PATH))
 
 
-def create_hybrid_search_retriever(top_k: int = TOP_K, alpha: float = ALPHA) -> PineconeHybridSearchRetriever:
+def create_hybrid_search_retriever(
+    top_k: int = TOP_K, alpha: float = ALPHA
+) -> PineconeHybridSearchRetriever:
     """LangChain Hybrid Retriever (Dense + Sparse 를 한 객체가 처리)"""
 
     return PineconeHybridSearchRetriever(
@@ -160,7 +167,7 @@ def _clean_metadata(metadata: dict) -> dict:
 
 def to_pinecone_filter(filters: dict | None) -> dict | None:
     """{"technology": "mcp", "document_type": ["error", "documentation"]}
-       → {"technology": {"$eq": "mcp"}, "document_type": {"$in": [...]}}   (여러 키는 AND)"""
+    → {"technology": {"$eq": "mcp"}, "document_type": {"$in": [...]}}   (여러 키는 AND)"""
 
     if not filters:
         return None
@@ -249,7 +256,10 @@ class PineconeHybridRetriever(BaseRetriever):
 
         # 4. 여러 검색어 결과는 RRF 로 합침
         if len(result_lists) == 1:
-            ranked = [(document, document.metadata.get("score", 0.0)) for document in result_lists[0]]
+            ranked = [
+                (document, document.metadata.get("score", 0.0))
+                for document in result_lists[0]
+            ]
         else:
             from src.rag.rrf import reciprocal_rank_fusion
 
@@ -259,7 +269,9 @@ class PineconeHybridRetriever(BaseRetriever):
         if self.use_rerank:
             from src.rag.rerank import rerank
 
-            ranked = rerank(query, [document for document, _ in ranked], top_n=self.top_k)
+            ranked = rerank(
+                query, [document for document, _ in ranked], top_n=self.top_k
+            )
 
         documents = []
 
@@ -289,7 +301,7 @@ def build_pinecone(technologies: list[str] | None = None, reset: bool = True):
             index.delete(delete_all=True)
             print("기존 벡터 삭제")
         except Exception:
-            pass                                    # 비어 있는 새 인덱스면 무시
+            pass  # 비어 있는 새 인덱스면 무시
 
     # 일부 기술만 올릴 때는 기존 BM25 를 유지 (전체 문서 기준 통계가 바뀌지 않게)
     if technologies and BM25_PATH.exists():
@@ -347,43 +359,3 @@ def get_chunk(chunk_id: str) -> Document | None:
     text = metadata.pop(TEXT_KEY, "")
 
     return Document(page_content=text, metadata=metadata)
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("query", nargs="?", default="LangGraph에서 GRAPH_RECURSION_LIMIT 에러가 발생하는 이유는?")
-    parser.add_argument("--build", action="store_true", help="문서를 다시 읽어 Pinecone 에 업로드")
-    parser.add_argument("--tech", nargs="+", help="langchain / langgraph / mcp 로 필터")
-    parser.add_argument("--rewrite", action="store_true", help="Query Rewrite 사용")
-    parser.add_argument("--multi", action="store_true", help="Multi-Query 사용")
-    parser.add_argument("--rerank", action="store_true", help="Cross-Encoder 재정렬 사용")
-    args = parser.parse_args()
-
-    if args.build:
-        build_pinecone()
-
-    retriever = create_hybrid_retriever(
-        filters={"technology": args.tech} if args.tech else None,
-        use_query_rewrite=args.rewrite,
-        use_multi_query=args.multi,
-        use_rerank=args.rerank,
-    )
-
-    documents = retriever.invoke(args.query)
-
-    print("검색 결과")
-
-    for i, document in enumerate(
-        documents,
-        start=1,
-    ):
-        print()
-        print(f"[{i}]")
-        print("score:", document.metadata.get("score"))
-        print("technology:", document.metadata.get("technology"))
-        print("document_type:", document.metadata.get("document_type"))
-        print("source:", document.metadata.get("source"))
-        print("source_url:", document.metadata.get("source_url"))
-        print(document.page_content[:500])
