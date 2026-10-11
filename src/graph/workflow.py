@@ -52,10 +52,10 @@ if __name__ == "__main__":
             "messages": [
                 {
                     "role": "user",
-                    "content": "langgraph에서 node의 역할이 뭐야",
+                    "content": "GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition이 나와요. 원인과 해결 방법 알려줘",
                 }
             ],
-            "original_question": "langgraph에서 node의 역할이 뭐야",
+            "original_question": "GraphRecursionError: Recursion limit of 25 reached without hitting a stop condition이 나와요. 원인과 해결 방법 알려줘",
         },
         config=config,
     )
