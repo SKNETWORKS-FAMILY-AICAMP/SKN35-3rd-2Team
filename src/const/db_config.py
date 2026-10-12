@@ -54,4 +54,10 @@ IMAGE_ANALYSIS_MAX_CHARS = 100_000          # 이미지에서 읽은 텍스트�
 DEFAULT_MESSAGE_MAX_CHARS = 200_000         # 질문/답변 한 건. 질문은 넘으면 거부, 답변은 잘라서 저장
 DEFAULT_SNIPPET_MAX_CHARS = 50_000          # 출처 발췌문. 넘으면 잘라서 저장
 DEFAULT_SUMMARY_MAX_CHARS = 50_000          # 대화 요약. 넘으면 잘라서 저장
+
+# ---------------------------------------------------------------------------
+# 답변에 붙는 출처 (src/db/sources.py의 build_sources)
+# ---------------------------------------------------------------------------
+SOURCES_MAX_PER_ANSWER = 10                 # 답변 한 건에 붙일 출처의 최대 개수 (화면과 DB 모두 이 목록을 쓴다)
+SOURCES_SNIPPET_CHARS = 500                 # 출처 발췌문 길이. DB 상한(SNIPPET_MAX_CHARS)보다 훨씬 짧게 두어 화면에 쓰기 좋게 한다
 CLIP_SUFFIX = " …(이하 생략)"               # 잘랐을 때 끝에 붙이는 표시

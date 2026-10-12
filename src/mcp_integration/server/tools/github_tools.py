@@ -149,13 +149,14 @@ def register(mcp) -> None:
 
     @mcp.tool()
     async def get_github_issue(repo: str, number: int, max_comments: int = 5) -> str:
-        """GitHub 이슈 한 건의 본문, 상태, 댓글을 가져온다.
+        """GitHub 이슈 또는 풀 리퀘스트(PR) 한 건의 본문, 상태, 댓글을 가져온다.
 
-        search_github_issues로 찾은 이슈의 내용(원인, 해결 방법, 관리자의 답)을 확인할 때 쓴다.
+        search_github_issues로 찾은 이슈의 내용(원인, 해결 방법, 관리자의 답)을 확인하거나, 사용자가 이슈나 PR의 번호나 주소
+        (예: .../issues/9163, .../pull/12345)를 직접 알려 주었을 때 쓴다. PR은 설명과 댓글만 가져오고 코드 변경(diff)은 가져오지 않는다.
 
         Args:
             repo: 저장소 (langchain-ai/langchain, langchain-ai/langgraph, modelcontextprotocol/python-sdk 중 하나)
-            number: 이슈 번호
+            number: 이슈 또는 PR 번호 (주소 끝의 숫자)
             max_comments: 가져올 댓글 수 0~10 (기본 5)
         """
         return common.dump(await get_issue(repo, number, max_comments))

@@ -6,6 +6,7 @@ from .masking import mask_secrets
 from .images import shrink_image
 from .models import Base, Conversation, Message, MessageAttachment, MessageSource, User, UserProfile
 from .session import db_session, get_engine, get_session_factory, reset_engine
+from .sources import build_sources
 from .turns import AssistantTurn, UserTurn, record_assistant_turn, record_user_turn
 from .repository import (
     UsernameTakenError,
@@ -48,5 +49,5 @@ __all__ = [
     "change_password", "set_user_active", "reset_password", "list_users",
     "create_conversation", "get_conversation", "list_conversations", "delete_conversation",
     "add_message", "get_message", "get_history_context", "set_summary",
-    "add_sources", "get_sources", "set_source_grounded",
+    "add_sources", "get_sources", "set_source_grounded", "build_sources",
 ]
