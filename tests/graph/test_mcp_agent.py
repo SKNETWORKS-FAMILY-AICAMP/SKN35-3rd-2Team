@@ -312,7 +312,7 @@ def test_mcp_node_returns_only_mcp_results_and_keeps_earlier_ones(env):
     env([pick(text="hi", times=3)], [OK])
     earlier = {"status": "success", "tool": "earlier"}
     out = mcp_node(parent_state(mcp_results=[earlier]))
-    assert list(out) == ["mcp_results"]  # 부모로는 이것 하나만 돌려준다
+    assert set(out) == {"mcp_results", "completed_routes"}  # 부모로는 이 둘만 돌려준다 (내부 값은 새지 않는다)
     assert out["mcp_results"][0] == earlier and out["mcp_results"][1]["status"] == cfg.STATUS_SUCCESS
 
 
@@ -470,3 +470,17 @@ def test_failed_and_no_tool_results_are_not_fenced(env):
     env([None])
     no_tool = last(run("점심 뭐 먹지?"))
     assert cfg.EXTERNAL_DATA_START not in failed["content"] + no_tool["content"]
+
+
+# ---------------------------------------------------------------- completed_routes (Supervisor가 끝난 route를 알게 한다)
+def test_mcp_node_adds_mcp_to_the_completed_routes(env):
+    env([pick(text="hi", times=3)], [OK])
+    assert mcp_node(parent_state())["completed_routes"] == ["mcp"]
+    env([pick(text="hi", times=3)], [OK])
+    assert mcp_node(parent_state(completed_routes=["rag"]))["completed_routes"] == ["rag", "mcp"]  # 앞선 route는 그대로 둔다
+
+
+def test_mcp_node_adds_mcp_to_the_completed_routes_even_when_it_fails(env, monkeypatch):
+    env([])
+    monkeypatch.setattr(agent_module, "list_tools_node", lambda state: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert mcp_node(parent_state(completed_routes=["rag"]))["completed_routes"] == ["rag", "mcp"]
