@@ -51,8 +51,19 @@ STYLE = """
 .ui-assistant {display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:12px;color:var(--ui-ink);}
 .ui-assistant-icon {background:#EEF2FF;border-radius:8px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;}
 .ui-assistant span {font-size:12px;font-weight:400;color:var(--ui-muted);}
-.st-key-composer [data-testid="stChatInput"] {background:white;border:1px solid var(--ui-border);border-radius:24px;}
-.st-key-composer [data-testid="stChatInput"] textarea {background:white;color:var(--ui-ink);}
+.st-key-composer [data-testid="stChatInput"] {
+ background:var(--ui-bg);border:1px solid #DCE2E9;border-radius:28px;
+ box-shadow:0 2px 8px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.04);
+ transition:border-color .15s ease,box-shadow .15s ease;}
+.st-key-composer [data-testid="stChatInput"]:focus-within {
+ border-color:var(--ui-accent)!important;
+ box-shadow:0 0 0 1px var(--ui-accent),0 2px 10px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.05);}
+.st-key-composer [data-testid="stChatInput"] {
+ --primary-color:var(--ui-accent);}
+.st-key-composer [data-testid="stChatInput"] div:focus-within,
+.st-key-composer [data-testid="stChatInput"] textarea:focus {
+ border-color:var(--ui-accent)!important;outline-color:var(--ui-accent)!important;}
+.st-key-composer [data-testid="stChatInput"] textarea {background:transparent!important;color:var(--ui-ink);}
 .st-key-composer [data-testid="stChatInputSubmitButton"] {background:var(--ui-accent);color:white;border-radius:12px;}
 .st-key-composer [data-testid="stVerticalBlock"] {gap:8px;}
 .st-key-example_0 [data-testid="stVerticalBlock"],.st-key-example_1 [data-testid="stVerticalBlock"],.st-key-example_2 [data-testid="stVerticalBlock"] {gap:8px;}
@@ -62,7 +73,9 @@ STYLE = """
 [data-testid="stMarkdownContainer"] p,[data-testid="stMarkdownContainer"] li {line-height:1.65;overflow-wrap:anywhere;}
 .stApp pre {overflow-x:auto;}
 .st-key-example_0,.st-key-example_1,.st-key-example_2 {background:white;border-radius:16px;gap:8px!important;}
-.st-key-composer [data-testid="stChatInput"] > div {background:white;}
+.st-key-composer [data-testid="stChatInput"] > div {
+ background:transparent!important;border:none!important;border-radius:inherit!important;}
+.st-key-composer [data-testid="stChatInput"] > div:focus-within {border:none!important;}
 [data-testid="stSelectbox"] [role="group"] {background:white;color:var(--ui-ink);border-color:var(--ui-border);border-radius:12px;}
 .st-key-preview_body h3 {font-size:20px;}
 @media(max-width:640px) {
@@ -70,52 +83,19 @@ STYLE = """
  .ui-welcome {margin-top:36px;}.ui-welcome h1 {font-size:26px;}.ui-user pre {max-width:100%;}
 }
 
-.st-key-composer_box {position:relative;background:#FFFFFF;border:1px solid var(--ui-border);
- border-radius:24px;padding:12px 16px!important;gap:4px!important;}
-.st-key-composer_box [data-testid="stChatInput"] {position:static!important;background:transparent!important;
- border:none!important;border-radius:0!important;min-height:43px!important;}
-.st-key-composer_box [data-testid="stChatInput"] > div {position:static!important;background:transparent!important;
- border:none!important;box-shadow:none!important;}
-.st-key-composer_box [data-testid="stChatInput"] textarea {background:transparent!important;}
-.st-key-composer_box [data-testid="stChatInputSubmitButton"] {position:absolute!important;right:16px;bottom:12px;
- width:36px;height:36px;border-radius:12px;}
-.ui-composer-tools {display:flex;justify-content:space-between;align-items:center;min-height:36px;
- padding-right:52px;gap:12px;font-size:12px;color:var(--ui-muted);}
-.ui-attachment-icon {font-size:18px;margin-right:6px;vertical-align:middle;}
-.ui-shortcut {white-space:nowrap;}
-.st-key-composer > [data-testid="stExpander"] {background:transparent;border:none;}
-@media(max-width:480px) {.ui-shortcut {font-size:10px;}.ui-composer-tools {gap:4px;font-size:11px;}}
-
-
-.st-key-composer_box [data-testid="stChatInput"] * {position:static!important;}
-.st-key-composer_box [data-testid="stChatInputSubmitButton"] {position:absolute!important;right:16px;bottom:12px;}
-.st-key-composer_tools {padding-right:52px;gap:8px!important;align-items:center;min-height:36px;}
-.st-key-composer_tools [data-testid="stButton"] button {border:none!important;background:transparent!important;
- padding:0!important;min-height:36px;color:var(--ui-muted);}
-.st-key-composer_tools [data-testid="stButton"] button p {font-size:12px;}
-.st-key-composer_tools [data-testid="stCaptionContainer"] {font-size:12px;white-space:nowrap;}
-.st-key-composer [data-testid="stExpander"]:not(.st-key-composer_box *) {background:transparent;border:none;}
-@media(max-width:480px) {.st-key-composer_tools [data-testid="stCaptionContainer"] {font-size:10px;}}
-
-.st-key-composer_box [data-testid="stElementContainer"]:has([data-testid="stChatInput"]) {position:static!important;}
-
-/* Compact initial height; long input can still grow within a bounded area. */
-.st-key-composer_box {padding:6px 12px!important;border-radius:18px;gap:0!important;}
-.st-key-composer_box [data-testid="stChatInput"] {min-height:28px!important;height:auto!important;}
-.st-key-composer_box [data-testid="stChatInput"] > div {min-height:28px!important;}
-.st-key-composer_box [data-testid="stChatInput"] textarea {min-height:28px!important;height:28px;
- max-height:120px!important;padding-top:2px!important;padding-bottom:2px!important;line-height:24px;}
-.st-key-composer_tools {min-height:24px!important;height:24px;gap:0!important;padding-right:44px;}
-.st-key-composer_tools [data-testid="stButton"] button {min-height:24px!important;height:24px;padding:0!important;}
-.st-key-composer_tools [data-testid="stButton"] button p {font-size:11px;}
-.st-key-composer_tools [data-testid="stCaptionContainer"] {font-size:11px;}
-.st-key-composer_box [data-testid="stChatInputSubmitButton"] {width:30px;height:30px;right:12px;bottom:6px;border-radius:10px;}
-
-.st-key-composer_box {height:68px!important;min-height:68px!important;overflow:hidden;}
-.st-key-composer_box [data-testid="stChatInput"] {height:30px!important;min-height:30px!important;}
-.st-key-composer_box [data-testid="stChatInput"] div {padding-top:0!important;padding-bottom:0!important;min-height:0!important;}
-.st-key-composer_box [data-testid="stChatInput"] textarea {height:28px!important;max-height:28px!important;overflow-y:auto!important;}
-.st-key-composer_tools {position:absolute!important;left:12px;right:52px;bottom:3px;padding-right:0!important;width:auto!important;justify-content:space-between!important;}
+/* Keep native chat input layout and hit targets intact. */
+.st-key-composer_box {padding:0!important;gap:8px!important;}
+.st-key-composer_box [data-testid="stChatInput"] {border-radius:28px;}
+.st-key-composer_box [data-testid="stChatInput"] textarea {
+ line-height:24px!important;max-height:192px!important;overflow-y:auto!important;}
+.st-key-composer_box textarea {text-align:left!important;}
+.st-key-composer_box textarea::placeholder {text-align:right;}
+.st-key-composer_tools {gap:8px!important;}
+[data-testid="stHeader"] {background:var(--ui-bg);}
+[data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:300px;}
+[data-testid="stBottomBlockContainer"] {margin-inline:auto;}
+.st-key-composer [data-testid="stChatInput"] .e1p9v2yr2 {
+ justify-content:flex-end;}
 .ui-sidebar-description {white-space:nowrap;font-size:12px;line-height:1.5;letter-spacing:-0.3px;color:var(--ui-muted);}
 /* Keep account controls visible; only the conversation list scrolls. */
 [data-testid="stSidebarContent"] {overflow:hidden!important;}
@@ -141,7 +121,7 @@ STYLE = """
 .st-key-sidebar_history {height:100%!important;flex:1 1 auto!important;}
 
 /* Compact sidebar width and preserve room for saved conversations. */
-[data-testid="stSidebar"] {width:260px!important;min-width:260px!important;max-width:260px!important;}
+[data-testid="stSidebar"][aria-expanded="true"] {width:260px!important;min-width:260px!important;max-width:260px!important;}
 [data-testid="stSidebarUserContent"] {padding:0 12px 12px!important;}
 .st-key-sidebar_shell > [data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_history) {min-height:100px!important;}
 .st-key-sidebar_shell > [data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_footer) {margin-top:auto;}
@@ -179,7 +159,43 @@ STYLE = """
 [data-testid="stDialog"] [data-baseweb="input"]:focus-within {
  border-color:#4F46E5!important;}
 
+
+/* Upload affordance and its native tooltip. */
+.st-key-composer [data-testid="stChatInputFileUploadButton"] button {
+ width:36px!important;height:36px!important;border-radius:50%!important;
+ transition:background-color .15s ease;color:#475569!important;}
+.st-key-composer [data-testid="stChatInputFileUploadButton"] button:not(:disabled):hover,
+.st-key-composer [data-testid="stChatInputFileUploadButton"] button:focus-visible {
+ background:#E5E7EB!important;}
+.codeclue-upload-tooltip {
+ background:#1E293B!important;color:#FFFFFF!important;
+ padding:10px 14px!important;border-radius:10px!important;
+ font-size:13px!important;line-height:1.5!important;
+ box-shadow:0 4px 12px rgba(15,23,42,.18)!important;}
+
 </style>
+"""
+
+
+UPLOAD_TOOLTIP = """
+<script>
+(() => {
+  // Streamlit exposes no upload-tooltip parameter. Update only its native tooltip.
+  const label = "Upload or drag files (PNG, JPG, WEBP). Up to 3 images.";
+  const update = () => {
+    document.querySelectorAll('[role="tooltip"], [data-testid="stTooltipContent"]').forEach(el => {
+      if (el.textContent.trim().startsWith("Upload or drag")) {
+        el.classList.add("codeclue-upload-tooltip");
+        if (el.textContent.trim() !== label) el.textContent = label;
+      }
+    });
+  };
+  if (window.codeclueUploadTooltipObserver) window.codeclueUploadTooltipObserver.disconnect();
+  window.codeclueUploadTooltipObserver = new MutationObserver(update);
+  window.codeclueUploadTooltipObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
+  update();
+})();
+</script>
 """
 
 EXAMPLES = (
@@ -374,17 +390,35 @@ def render_authentication():
         return
     st.markdown("**게스트**")
     st.caption("로그인하고 이전 대화를 이어가세요.")
-    if st.button("로그인 / 회원가입", key="login_open", icon=":material/login:", width="stretch"):
-        st.session_state.ui_auth_open = not st.session_state.get("ui_auth_open", False)
+    if st.button("로그인/ 회원가입", key="login_open", icon=":material/login:", width="stretch"):
+        st.session_state.ui_auth_open = True
+        st.session_state.auth_action = "로그인"
 
 
 def close_auth_dialog():
     st.session_state.ui_auth_open = False
 
 
-@st.dialog("로그인 / 회원가입", width="small", on_dismiss=close_auth_dialog)
+@st.dialog("로그인", width="small", on_dismiss=close_auth_dialog)
 def render_auth_dialog():
-    action = st.radio("계정 메뉴", ["로그인", "회원가입"], key="auth_action", horizontal=True)
+    render_auth_form("로그인")
+
+
+@st.dialog("회원가입", width="small", on_dismiss=close_auth_dialog)
+def render_signup_dialog():
+    render_auth_form("회원가입")
+
+
+def switch_auth(action):
+    st.session_state.auth_action = action
+    for key in ("auth_username", "auth_password", "auth_confirmation"):
+        st.session_state.pop(key, None)
+    st.rerun(scope="app")
+
+
+def render_auth_form(action):
+    if st.session_state.pop("auth_registered", False):
+        st.success("회원가입이 완료되었습니다. 로그인해 주세요.")
     st.caption("아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상")
     with st.form("account_form", clear_on_submit=True):
         username = st.text_input("아이디", key="auth_username", max_chars=30)
@@ -416,7 +450,9 @@ def render_auth_dialog():
             st.error("계정 정보를 확인하지 못했습니다. DB 연결과 테이블 준비 상태를 확인해 주세요.")
             return
         if action == "회원가입":
-            st.success("회원가입이 완료되었습니다. 로그인 메뉴에서 로그인해 주세요.")
+            st.session_state.auth_registered = True
+            switch_auth("로그인")
+            st.rerun()
         elif identity is None:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
         else:
@@ -432,6 +468,9 @@ def render_auth_dialog():
             st.session_state.ui_db_notice = None
             st.session_state.ui_auth_open = False
             st.rerun()
+    st.button("회원가입" if action == "로그인" else "로그인으로 돌아가기",
+              key="auth_switch", width="stretch", on_click=switch_auth,
+              args=("회원가입" if action == "로그인" else "로그인",))
     st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다. 새로고침 후에는 다시 로그인할 수 있습니다.")
 
 
@@ -487,21 +526,8 @@ def render_sidebar():
                     st.session_state.previous_mode = item["mode"]
                     st.rerun()
         with st.container(key="sidebar_footer"):
-            with st.popover("설정", icon=":material/tune:", width="stretch"):
-                mode = st.selectbox("답변 모드", ["OpenAI AI 답변", "연습 모드", "NVIDIA AI 답변"], key="answer_mode")
-                if mode == "OpenAI AI 답변":
-                    st.caption(f"모델: {OPEN_MODEL}")
-                if st.session_state.get("previous_mode", mode) != mode:
-                    reset_conversation()
-                st.session_state.previous_mode = mode
-                st.caption("모드를 바꾸면 새 대화를 시작합니다. 연습·NVIDIA 대화는 현재 접속에서만 유지됩니다.")
-                with st.expander("디자인 미리보기", icon=":material/visibility:"):
-                    st.selectbox("시안 화면", ["실제 채팅", "오류 분석 예시", "추가 정보 요청 예시"], key="ui_preview")
-                    st.caption("예시 화면은 API를 호출하거나 대화를 저장하지 않습니다.")
-                with st.expander("현재 사용할 수 있는 기능"):
-                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석(스크린샷 첨부)")
             render_authentication()
-    return mode
+    return st.session_state.answer_mode
 
 
 def render_welcome():
@@ -531,14 +557,16 @@ def render_message(message, index):
     if message["role"] == "user":
         text = message.get("display_content", message["content"])
         if message.get("images") and text == DEFAULT_IMAGE_TEXT:
-            text = "(이미지만 첨부했어요)"
-        st.html(f'<div class="ui-user"><pre>{escape(text)}</pre></div>')
+            text = ""
+        if text:
+            st.html(f'<div class="ui-user"><pre>{escape(text)}</pre></div>')
         if message.get("images"):
-            for column, data in zip(st.columns(max(len(message["images"]), 3)), message["images"]):
-                try:
-                    column.image(data, use_container_width=True)
-                except Exception:  # 깨진 이미지 데이터가 있어도 화면 전체가 멈추지 않게 한다
-                    column.caption("이미지를 표시할 수 없어요.")
+            with st.container(horizontal=True, horizontal_alignment="right"):
+                for data in message["images"]:
+                    try:
+                        st.image(data, width=180, alt="첨부한 오류 화면")
+                    except Exception:
+                        st.caption("이미지를 표시할 수 없어요.")
         if message.get("image_analysis"):
             with st.expander("이미지에서 읽은 내용", icon=":material/image_search:"):
                 st.text(message["image_analysis"])
@@ -605,24 +633,11 @@ def render_preview_body(kind):
 def render_composer(preview):
     with st.bottom:
         with st.container(key="composer"):
-            with st.expander("개발 환경 추가 · 선택", icon=":material/tune:"):
-                left, right = st.columns(2)
-                with left:
-                    st.selectbox("사용 기술", ["선택 안 함", "LangChain", "LangGraph", "MCP"], key="env_tech")
-                    st.selectbox("실행 환경", ["선택 안 함", "Python", "Node.js", "기타"], key="env_runtime")
-                with right:
-                    st.text_input("라이브러리 / SDK 버전", placeholder="사용 중인 실제 버전 입력", key="env_sdk")
-                    st.text_input("실행 환경 버전", placeholder="사용 중인 실제 버전 입력", key="env_version")
-                st.selectbox("운영체제", ["선택 안 함", "Windows", "macOS", "Linux", "기타"], key="env_os")
-                st.caption("선택한 환경은 다음 질문에 함께 전달됩니다. 입력 전에는 버전을 가정하지 않습니다.")
             with st.container(key="composer_box"):
                 prompt = st.chat_input("에러 메시지와 관련 코드를 입력해 주세요.", key="chat_input",
-                                       submit_mode="disable", height=43, disabled=preview,
+                                       submit_mode="disable", height="content", disabled=preview,
                                        accept_file="multiple", file_type=IMAGE_TYPES, max_upload_size=MAX_UPLOAD_MB)
-                with st.container(key="composer_tools", horizontal=True, horizontal_alignment="distribute"):
-                    st.caption("이미지는 3장까지 · png, jpg, webp")
-                    st.caption("Shift + Enter 줄바꿈")
-            st.caption("실제 코드와 공식 원문을 확인해 주세요. API 키·비밀번호는 입력하지 마세요.")
+            st.caption("API 키·비밀번호는 입력하지 마세요.", text_alignment="center")
     return prompt
 
 
@@ -678,9 +693,13 @@ def render_chat():
         st.session_state.ui_history = {}
     st.session_state.ui_owner = owner
     st.html(STYLE)
+    st.html(UPLOAD_TOOLTIP, unsafe_allow_javascript=True)
     mode = render_sidebar()
     if st.session_state.get("ui_auth_open") and st.session_state.get("user_id") is None:
-        render_auth_dialog()
+        if st.session_state.get("auth_action") == "회원가입":
+            render_signup_dialog()
+        else:
+            render_auth_dialog()
     if st.session_state.get("ui_db_notice"):
         st.warning(st.session_state.ui_db_notice)
     preview = st.session_state.ui_preview != "실제 채팅"
@@ -733,4 +752,6 @@ def render_chat():
             render_message({"role": "user", "content": prompt or DEFAULT_IMAGE_TEXT, "images": images},
                            len(st.session_state.messages))
             send_question(prompt, mode, images=images)
+
+
 
