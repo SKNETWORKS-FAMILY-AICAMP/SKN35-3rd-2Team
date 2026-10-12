@@ -1,6 +1,6 @@
 """UI contract checks, with no external API calls or team implementation changes."""
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 import sys
 
@@ -53,6 +53,10 @@ def test_unchanged_graph_history_and_unimplemented_routes(monkeypatch):
         "src.graph.node.answer.answer_node"]
     for name in module_names:
         monkeypatch.delitem(sys.modules, name, raising=False)
+    # Keep this connection test offline: workflow now imports the RAG agent.
+    rag_module = ModuleType("src.agent.rag_agent")
+    rag_module.rag_node = lambda state: {"retrieved_docs": [], "completed_routes": ["rag"]}
+    monkeypatch.setitem(sys.modules, "src.agent.rag_agent", rag_module)
     from src.graph.workflow import workflow
     graph = workflow()
     history = [{"role": "user", "content": "첫 질문"}]
@@ -65,7 +69,7 @@ def test_unchanged_graph_history_and_unimplemented_routes(monkeypatch):
     assert len(fake.seen[-1]) == 2
     fake.route = "answer"
     assert run_chat(history, graph=graph)["status"] == "success"
-    for route in ("rag", "mcp", "multimodal"):
+    for route in ("mcp", "multimodal"):
         fake.route = route
         assert run_chat(history, graph=graph)["status"] == "unsupported"
 

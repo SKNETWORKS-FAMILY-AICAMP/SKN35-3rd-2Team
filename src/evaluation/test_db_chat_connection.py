@@ -95,3 +95,23 @@ def test_failed_graph_keeps_question_without_saving_error_answer(local_db, monke
 @pytest.mark.parametrize("uid,cid", [(None, None), (True, None), (0, None), (1, -1), (1, "123")])
 def test_invalid_identity_rejected_before_db(uid, cid):
     assert chat_service.run_db_chat("질문", user_id=uid, conversation_id=cid)["error"]["code"] == "INVALID_INPUT"
+
+
+def test_rag_references_saved_with_answer(local_db, monkeypatch):
+    from langchain_core.documents import Document
+    sessions, uid, _ = local_db
+    graph = Mock()
+    graph.invoke.return_value = {"route": "answer", "messages": [AIMessage(content="答え")],
+        "retrieved_docs": [Document(page_content="reference text", metadata={
+            "source_url": "https://docs.example.org/graph", "title": "Graph API",
+            "technology": "langgraph", "document_type": "documentation"})]}
+    monkeypatch.setattr(chat_service, "get_graph", lambda: graph)
+    result = chat_service.run_db_chat("質問", user_id=uid)
+    assert result["status"] == "success"
+    with sessions() as session:
+        rows = list_messages(session, result["conversation_id"], uid)
+        assert len(rows) == 2
+        source = rows[-1].sources[0]
+        assert source.url == result["sources"][0]["url"]
+        assert source.title == "Graph API" and source.tech == "langgraph"
+        assert source.is_grounded is None

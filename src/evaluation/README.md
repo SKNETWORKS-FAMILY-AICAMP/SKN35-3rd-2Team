@@ -99,3 +99,24 @@ SDK·프로토콜 버전과 전송 방식을 기록하며, 명시한 구버전 �
 - DB 함수와 그래프 내부는 수정하지 않았습니다.
 - 검증: `python -m pytest src/evaluation/test_chat_connection.py src/evaluation/test_db_chat_connection.py -q -p no:cacheprovider`.
 - DB 연결 테스트는 메모리 SQLite만 사용합니다. 공유 DB와 실제 API에 접속하지 않습니다.
+
+
+## RAG 응답·출처 계약 (2026-10-12 연결)
+
+- 그래프의 `answer` 또는 마지막 AI 메시지를 답변으로 반환합니다.
+- 최종 `retrieved_docs`를 `sources`로 변환합니다. `source_url → url`, `technology → tech`, `document_type → doc_type`. 실제 버전 값이 있을 때만 version을 전달합니다.
+- source_url, url, github_url 순서로 유효한 HTTP(S) 주소를 선택합니다. 로컬 source 경로로 링크를 만들지 않습니다. 같은 URL은 첫 문서를 유지합니다.
+- 제목·기술·버전·유형은 DB 길이 제한에 맞춥니다. snippet은 최대 1000자이며 점수는 유한한 rerank_score, score 순서로 선택합니다. 점수는 답변 정확도 확률이 아닙니다.
+- 출처가 없더라도 답변이 있으면 성공입니다. sources는 답변 생성에 전달된 참고 문서이며 주장별 인용 검증 결과가 아닙니다. is_grounded를 설정하지 않습니다.
+- DB의 기존 record_assistant_turn에 같은 sources를 전달합니다. graph/RAG/prompt/DB 내부 구현은 변경하지 않습니다. MCP·이미지는 기존 준비 중 처리를 유지합니다.
+- UI 안내와 RAG 미구현을 가정하던 테스트를 함께 갱신합니다.
+- 작업 폴더에서 모의 그래프·메모리 SQLite 검증 14개 통과. 실제 API 품질·브라우저 화면·공유 DB는 미검증입니다.
+
+### 현재 연결 결과
+
+- 실제 저장소의 `keh_branch` 작업 파일에 RAG 응답 연결을 적용했습니다. 앞의 일반 질문만 지원한다는 기록은 당시 상태입니다.
+- RAG 답변을 화면에 표시하고, `retrieved_docs`의 출처를 기존 참고 자료 영역과 DB 저장에 전달합니다.
+- 기존 메타데이터 별칭과 유효한 URL 검사 후 팀의 `src.db.build_sources()`를 사용합니다. 비밀값 가리기와 출처 개수 상한도 함께 적용합니다.
+- MCP·이미지 경로는 준비 중 처리를 유지합니다.
+- 검증: `python -m pytest src/evaluation/test_rag_contract.py src/evaluation/test_db_chat_connection.py tests/db/test_sources.py -q -p no:cacheprovider` — 55개 통과.
+- Streamlit AppTest로 RAG 답변·참고 자료 제목·원문 링크 표시를 확인했고 메모리 SQLite로 출처 저장을 확인했습니다. 실제 API 검색, 브라우저 외관, 공유 DB는 아직 확인하지 않았습니다.

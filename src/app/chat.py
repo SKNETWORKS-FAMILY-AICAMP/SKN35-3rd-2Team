@@ -232,7 +232,8 @@ def generate_answer(messages, mode, *, user_id=None, conversation_id=None):
 def render_sources(sources):
     if not sources:
         return
-    with st.expander("참고 근거", icon=":material/library_books:"):
+    with st.expander("참고 자료", icon=":material/library_books:"):
+        st.caption("답변 생성에 전달된 검색 문서입니다. 각 문서가 답변을 뒷받침하는지는 별도 확인이 필요합니다.")
         for index, source in enumerate(sources, 1):
             with st.container(border=True):
                 st.markdown(f"**[{index}] {source.get('title') or '참고 문서'}**")
@@ -469,7 +470,7 @@ def render_sidebar():
                     st.selectbox("시안 화면", ["실제 채팅", "오류 분석 예시", "추가 정보 요청 예시"], key="ui_preview")
                     st.caption("예시 화면은 API를 호출하거나 대화를 저장하지 않습니다.")
                 with st.expander("현재 사용할 수 있는 기능"):
-                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석: 준비 중")
+                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색 기반 답변\n- 외부 조회·이미지 분석: 준비 중")
             render_authentication()
     return mode
 
@@ -643,7 +644,7 @@ def render_chat():
             if mode == "연습 모드":
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
-                st.caption("현재 일반 답변을 제공합니다. 공식 문서 검색·외부 조회·이미지 분석은 준비 중입니다.")
+                st.caption("일반 질문과 문서 검색 기반 답변을 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다. 외부 조회·이미지 분석은 준비 중입니다.")
             if not st.session_state.messages and not st.session_state.ui_failure:
                 render_welcome()
             for index, message in enumerate(st.session_state.messages):
