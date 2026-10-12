@@ -28,6 +28,7 @@
 #   retriever = create_hybrid_retriever(top_k=5, use_query_rewrite=True)
 #   documents = retriever.invoke("MCP 서버 연결하면 -32601 오류가 나요")
 
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 from langchain_community.retrievers import PineconeHybridSearchRetriever
@@ -63,6 +64,8 @@ FETCH_K = 20
 TEXT_KEY = "text"
 
 
+# [검색 시간 단축] Pinecone 클라이언트는 한 번만 만들고 재사용 (매번 새 연결을 맺지 않게)
+@lru_cache(maxsize=1)
 def get_pinecone_client():
     if not PINECONE_API_KEY:
         raise RuntimeError(".env 에 PINECONE_API_KEY 가 없습니다.")
@@ -121,6 +124,7 @@ def create_bm25_encoder(documents: list[Document]) -> BM25Encoder:
     print(f"BM25 저장: {BM25_PATH}")
 
     load_bm25_encoder.cache_clear()
+    create_hybrid_search_retriever.cache_clear()  # 예전 BM25 를 쥔 Retriever 도 버림
 
     return encoder
 
@@ -135,6 +139,11 @@ def load_bm25_encoder() -> BM25Encoder:
     return BM25Encoder().load(str(BM25_PATH))
 
 
+# [검색 시간 단축] 검색할 때마다 새로 만들지 않고 (top_k, alpha) 조합별로 한 번만 만들어 재사용
+#   - OpenAI 임베딩 객체: HTTP 연결 재사용
+#   - pc.Index(이름): 인덱스 주소를 묻는 API 호출을 처음 한 번만
+#   top_k 가 5(단일 검색), 20(여러 검색어·재정렬) 처럼 달라질 수 있어 maxsize=8
+@lru_cache(maxsize=8)
 def create_hybrid_search_retriever(
     top_k: int = TOP_K, alpha: float = ALPHA
 ) -> PineconeHybridSearchRetriever:
@@ -249,10 +258,15 @@ class PineconeHybridRetriever(BaseRetriever):
         top_k = max(self.fetch_k, self.top_k) if many else self.top_k
 
         # 3. 검색어마다 Hybrid 검색
-        result_lists = [
-            hybrid_search(query=q, top_k=top_k, filters=filters, alpha=self.alpha)
-            for q in queries
-        ]
+        #    [검색 시간 단축] 검색어가 여러 개면 하나씩 기다리지 않고 동시에 요청
+        def search_one(q: str) -> list[Document]:
+            return hybrid_search(query=q, top_k=top_k, filters=filters, alpha=self.alpha)
+
+        if len(queries) == 1:
+            result_lists = [search_one(queries[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+                result_lists = list(executor.map(search_one, queries))
 
         # 4. 여러 검색어 결과는 RRF 로 합침
         if len(result_lists) == 1:
@@ -294,6 +308,13 @@ def build_pinecone(technologies: list[str] | None = None, reset: bool = True):
 
     chunks = split_documents(documents)
 
+    # 올릴 문서가 없으면 아무것도 지우지 않고 멈춤 (팀이 같이 쓰는 인덱스를 비우지 않게)
+    if not chunks:
+        raise RuntimeError(
+            "업로드할 문서가 없습니다. data/raw/<tech> 에 .mdx 가 있는지, "
+            "python -m src.preprocessing.mdx_to_document 를 실행했는지 확인하세요."
+        )
+
     index = create_pinecone_index()
 
     if reset and not technologies:
@@ -332,10 +353,17 @@ def create_hybrid_retriever(**options):
 
     existing_indexes = [index.name for index in pc.list_indexes()]
 
-    if PINECONE_INDEX_NAME not in existing_indexes or not BM25_PATH.exists():
-        print("Pinecone Index 또는 BM25 파일이 없습니다.")
+    if PINECONE_INDEX_NAME not in existing_indexes:
+        print(f"Pinecone Index 가 없습니다: {PINECONE_INDEX_NAME}")
 
         build_pinecone()
+
+    elif not BM25_PATH.exists():
+        # 인덱스는 이미 있으니 다시 만들지 않음 (다시 만들면 팀원이 올린 벡터가 지워짐)
+        raise FileNotFoundError(
+            f"{BM25_PATH} 가 없습니다. 인덱스를 만든 팀원에게 data/processed/bm25_params.json 을 받아 "
+            "같은 위치에 넣으세요."
+        )
 
     else:
         print(f"Pinecone Index 사용: {PINECONE_INDEX_NAME}")
