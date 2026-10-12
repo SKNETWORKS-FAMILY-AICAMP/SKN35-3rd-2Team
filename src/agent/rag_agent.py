@@ -12,33 +12,33 @@ from src.graph.state import RAGState, State
 
 
 def route_after_rerank(state: RAGState) -> str:
-    print("route_after_rerank 진입 ", end="\n\n")
+    print("route_after_rerank 진입", end="\n\n")
 
     documents = state.get("documents", [])
     retry_count = state.get("retry_count", 0)
 
-    print("retry_count : ", retry_count, end="\n\n")
-
-    retries_left = retry_count < MAX_RETRY
+    print("retry_count:", retry_count, end="\n\n")
 
     scores = [
         doc.metadata["rerank_score"]
         for doc in documents
         if "rerank_score" in doc.metadata
     ]
-    print("scores : ", scores, end="\n\n")
-    top_score = max(scores) if scores else None
 
-    result = "give_up"
+    print("scores:", scores, end="\n\n")
+
+    top_score = max(scores) if scores else None
 
     if top_score is not None and top_score >= RERANK_SCORE_THRESHOLD:
         result = "compress"
-    if retries_left:
-        result = "retry"
-    if documents:
-        result = "compress"
 
-    print("result : ", result, end="\n\n")
+    elif retry_count < MAX_RETRY:
+        result = "retry"
+
+    else:
+        result = "give_up"
+
+    print("result:", result, end="\n\n")
 
     return result
 
