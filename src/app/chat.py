@@ -534,7 +534,10 @@ def render_message(message, index):
         st.html(f'<div class="ui-user"><pre>{escape(text)}</pre></div>')
         if message.get("images"):
             for column, data in zip(st.columns(max(len(message["images"]), 3)), message["images"]):
-                column.image(data, use_container_width=True)
+                try:
+                    column.image(data, use_container_width=True)
+                except Exception:  # 깨진 이미지 데이터가 있어도 화면 전체가 멈추지 않게 한다
+                    column.caption("이미지를 표시할 수 없어요.")
         if message.get("image_analysis"):
             with st.expander("이미지에서 읽은 내용", icon=":material/image_search:"):
                 st.text(message["image_analysis"])
@@ -630,13 +633,19 @@ def environment_question(prompt):
     return prompt + ("\n\n[사용자가 제공한 개발 환경]\n" + "\n".join(values) if values else "")
 
 
+def graph_messages(messages):
+    """로그인하지 않은 대화는 DB 이력이 없으므로, 이전에 읽은 이미지 내용을 질문 글에 붙여서 다음 질문에도 AI가 기억하게 한다."""
+    return [{**m, "content": m["content"] + "\n\n[첨부 이미지에서 읽은 내용] " + m["image_analysis"]}
+            if m["role"] == "user" and m.get("image_analysis") else m for m in messages]
+
+
 def send_question(prompt, mode, *, prepared=None, images=None):
     if prepared is not None:
         images = prepared.get("images")
     user_message = prepared or {"role": "user", "content": environment_question(prompt or DEFAULT_IMAGE_TEXT),
                                 "display_content": prompt or DEFAULT_IMAGE_TEXT, "images": images or []}
     with st.spinner("입력을 확인하는 중…" if mode == "연습 모드" else "답변을 작성하고 있어요…", show_time=True):
-        result = generate_answer(st.session_state.messages + [user_message], mode,
+        result = generate_answer(graph_messages(st.session_state.messages) + [user_message], mode,
                                  user_id=st.session_state.get("user_id"),
                                  conversation_id=st.session_state.get("conversation_id"),
                                  images=images or None)
@@ -647,6 +656,7 @@ def send_question(prompt, mode, *, prepared=None, images=None):
         persisted = load_saved_conversation(result["conversation_id"])
     if result["status"] == "success":
         if not persisted:
+            user_message = {**user_message, "image_analysis": result.get("image_analysis")}  # 로그인 안 해도 읽은 내용을 보여 준다
             st.session_state.messages.extend([user_message, {"role": "assistant", "content": result["answer"], "sources": result["sources"]}])
         st.session_state.ui_failure = None
         remember_conversation(mode)

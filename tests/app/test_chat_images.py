@@ -118,3 +118,19 @@ def test_split_composer_value():
     assert text == "t" and images == [bytes([i]) for i in range(3)] and "3장" in notice
     assert split_composer_value({"text": "", "files": files[:1]})[1] == [b"\x00"]
     assert DEFAULT_IMAGE_TEXT == chat_service.IMAGE_ONLY_QUESTION
+
+
+def test_corrupt_image_is_rejected_with_message():
+    broken = png()[:40]  # 머리 부분은 png지만 내용이 잘림
+    result = chat_service.run_chat([{"role": "user", "content": "q"}], images=[broken])
+    assert result["error"]["code"] == "INVALID_IMAGE" and "읽을 수 없어요" in result["error"]["message"]
+
+
+def test_guest_history_carries_earlier_image_analysis():
+    from src.app.chat import graph_messages
+
+    history = [{"role": "user", "content": "첫 질문", "image_analysis": "Traceback ..."},
+               {"role": "assistant", "content": "답"}, {"role": "user", "content": "후속"}]
+    out = graph_messages(history)
+    assert "[첨부 이미지에서 읽은 내용] Traceback ..." in out[0]["content"]
+    assert out[1] == history[1] and out[2] == history[2]

@@ -39,6 +39,10 @@ def prepare_images(images):
     items = [bytes(data) for data in (images or []) if data]
     if not items:
         return []
+    import io
+
+    from PIL import Image
+
     from src.db.images import max_image_bytes, max_images_per_message, shrink_image, sniff_mime
 
     if len(items) > max_images_per_message():
@@ -47,6 +51,11 @@ def prepare_images(images):
     for number, data in enumerate(items, 1):
         if sniff_mime(data) is None:
             raise ValueError(f"이미지 {number}은(는) png, jpeg, webp 형식이 아니에요.")
+        try:
+            with Image.open(io.BytesIO(data)) as picture:
+                picture.load()
+        except Exception as error:
+            raise ValueError(f"이미지 {number}을(를) 읽을 수 없어요. 손상되지 않은 이미지를 올려 주세요.") from error
         if len(data) > max_image_bytes():
             try:
                 data, _ = shrink_image(data)
