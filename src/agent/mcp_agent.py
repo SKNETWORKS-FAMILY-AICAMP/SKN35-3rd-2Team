@@ -73,12 +73,15 @@ def route_after_call_tool(state: MCPState):
 def mcp_node(state: State):
     """메인 그래프에 붙이는 노드 (workflow.py에서 builder.add_node("mcp", mcp_node)). rag_agent.py의 rag_node와 같은 방식이다.
 
-    MCP 에이전트를 실행해서 부모로는 mcp_results만 돌려준다. 이 노드를 쓰는 이유는 두 가지다.
+    MCP 에이전트를 실행해서 부모로는 mcp_results와 completed_routes만 돌려준다. 이 노드를 쓰는 이유는 세 가지다.
     - MCP는 "있으면 좋은 보조 정보"라서, 안에서 예상하지 못한 오류가 나더라도 질문 전체가 실패하면 안 된다.
       오류를 잡아서 "실패" 결과로 바꿔 돌려주면, 이어지는 answer 노드가 "조회에 실패했다"고 알리며 계속 답할 수 있다.
-    - 부모로 돌아가는 값을 mcp_results 하나로 분명히 제한한다 (서브그래프를 노드로 직접 붙이면 부모와 이름이 같은 키가 모두 돌아간다).
+    - 부모로 돌아가는 값을 분명히 제한한다 (서브그래프를 노드로 직접 붙이면 부모와 이름이 같은 키가 모두 돌아간다).
+    - completed_routes에 "mcp"를 더해 돌려준다 (rag_node가 "rag"를 더하는 것과 같다).
+      Supervisor는 이 목록을 보고 이미 끝낸 route를 다시 고르지 않는다. 이게 없으면 MCP가 끝났는지 몰라 계속 mcp를 고르게 된다.
     """
     previous = list(state.get("mcp_results") or [])
+    completed = [*(state.get("completed_routes") or []), "mcp"]
     try:
         result = mcp_agent().invoke(
             {
@@ -88,9 +91,9 @@ def mcp_node(state: State):
                 "mcp_results": previous,
             }
         )
-        return {"mcp_results": result["mcp_results"]}
+        return {"mcp_results": result["mcp_results"], "completed_routes": completed}
     except Exception as exc:
-        return {"mcp_results": [*previous, failed_record(describe_error(exc))]}
+        return {"mcp_results": [*previous, failed_record(describe_error(exc))], "completed_routes": completed}
 
 
 def mcp_agent():

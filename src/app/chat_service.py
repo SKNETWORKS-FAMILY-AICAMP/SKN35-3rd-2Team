@@ -38,6 +38,19 @@ def unsupported_result():
         "문서 검색·외부 조회·이미지 분석은 준비 중입니다. 현재는 일반 질문에 답변합니다.")
 
 
+def result_sources(result):
+    """그래프 결과(RAG 문서, MCP 결과)에서 화면과 DB가 같이 쓰는 출처 목록을 만든다.
+
+    출처를 만들지 못해도(예: DB 패키지가 없는 환경) 답변은 그대로 낸다.
+    """
+    try:
+        from src.db import build_sources
+
+        return build_sources(result.get("retrieved_docs"), result.get("mcp_results"))
+    except Exception:
+        return []
+
+
 def run_chat(messages, *, conversation_id=None, graph=None):
     """Send full bounded history to a fresh graph, using the DB conversation ID.
 
@@ -70,7 +83,7 @@ def run_chat(messages, *, conversation_id=None, graph=None):
         answer = text_content(result.get("answer")) or text_content(replies[-1].content)
         if not answer:
             return chat_result(status="error", code="EMPTY_RESPONSE", message="AI 답변이 비어 있습니다.")
-        return chat_result(answer)
+        return chat_result(answer, sources=result_sources(result))
     except Exception as error:
         # dev's conditional edge mapping has no destinations for these routes.
         # Recognize that existing contract failure without changing graph internals.
