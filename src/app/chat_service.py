@@ -21,15 +21,15 @@ def text_content(content):
     return ""
 
 
-def chat_result(answer="", *, status="success", code=None, message=None, sources=None):
+def chat_result(answer="", *, status="success", code=None, message=None, sources=None, image_analysis=None):
     return {
         "status": status, "answer": answer, "sources": sources or [],
-        "image_analysis": None,
+        "image_analysis": image_analysis,
         "error": {"code": code, "message": message} if code else None,
     }
 
 
-def document_sources(documents):
+def document_sources(documents, mcp_results=None):
     """Convert final graph Documents to DB-compatible reference metadata.
 
     These are documents supplied to the answer node, not verified citations.
@@ -38,7 +38,7 @@ def document_sources(documents):
     sources = []
     seen = set()
     for document in documents or []:
-        metadata = getattr(document, "metadata", None)
+        metadata = document.get("metadata") if isinstance(document, dict) else getattr(document, "metadata", None)
         if not isinstance(metadata, dict):
             continue
         url = None
@@ -69,7 +69,7 @@ def document_sources(documents):
                 if isinstance(value, str) and value.strip():
                     source[output] = value.strip()[:limit]
                     break
-        content = getattr(document, "page_content", None)
+        content = document.get("page_content") if isinstance(document, dict) else getattr(document, "page_content", None)
         if isinstance(content, str) and content.strip():
             source["snippet"] = content.strip()[:1000]
         for key in ("rerank_score", "score"):
@@ -86,7 +86,45 @@ def document_sources(documents):
         "document_type": source.get("doc_type"), "score": source.get("score"),
     }, "page_content": source.get("snippet")} for source in sources]
     return [{key: value for key, value in source.items() if value is not None}
-            for source in build_sources(documents)]
+            for source in build_sources(documents, mcp_results)]
+
+
+# 이미지만 올리고 질문을 쓰지 않았을 때 그래프에 넘기는 질문
+IMAGE_ONLY_QUESTION = "첨부한 이미지를 확인하고 문제의 원인과 해결 방법을 알려 주세요."
+
+
+def prepare_images(images):
+    """첨부 이미지를 DB 한도에 맞춘다: 장수와 형식을 확인하고, 한 장이 크기 한도보다 크면 줄여서 쓴다.
+
+    문제가 있으면 사용자에게 그대로 보여 줄 수 있는 문장으로 ValueError를 낸다.
+    """
+    items = [bytes(data) for data in (images or []) if data]
+    if not items:
+        return []
+    import io
+
+    from PIL import Image
+
+    from src.db.images import max_image_bytes, max_images_per_message, shrink_image, sniff_mime
+
+    if len(items) > max_images_per_message():
+        raise ValueError(f"이미지는 한 번에 {max_images_per_message()}장까지 첨부할 수 있어요.")
+    prepared = []
+    for number, data in enumerate(items, 1):
+        if sniff_mime(data) is None:
+            raise ValueError(f"이미지 {number}은(는) png, jpeg, webp 형식이 아니에요.")
+        try:
+            with Image.open(io.BytesIO(data)) as picture:
+                picture.load()
+        except Exception as error:
+            raise ValueError(f"이미지 {number}을(를) 읽을 수 없어요. 손상되지 않은 이미지를 올려 주세요.") from error
+        if len(data) > max_image_bytes():
+            try:
+                data, _ = shrink_image(data)
+            except (ValueError, RuntimeError) as error:
+                raise ValueError(f"이미지 {number}을(를) {max_image_bytes() // 1_000_000}MB 이하로 줄이지 못했어요. 더 작은 이미지를 올려 주세요.") from error
+        prepared.append(data)
+    return prepared
 
 
 def get_graph():
@@ -97,15 +135,33 @@ def get_graph():
 
 def unsupported_result():
     return chat_result(status="unsupported", code="UNSUPPORTED_ROUTE", message=
-        "외부 조회·이미지 분석은 준비 중입니다. 일반 질문과 문서 검색 기반 답변을 제공합니다.")
+        "요청한 처리 단계가 완료되지 않아 답변을 만들지 못했습니다. 그래프 연결과 종료 조건을 확인해 주세요.")
 
 
-def run_chat(messages, *, conversation_id=None, graph=None):
+def result_sources(result):
+    """그래프 결과(RAG 문서, MCP 결과)에서 화면과 DB가 같이 쓰는 출처 목록을 만든다.
+
+    출처를 만들지 못해도(예: DB 패키지가 없는 환경) 답변은 그대로 낸다.
+    """
+    try:
+        from src.db import build_sources
+
+        return document_sources(result.get("retrieved_docs"), result.get("mcp_results"))
+    except Exception:
+        return []
+
+
+def run_chat(messages, *, conversation_id=None, graph=None, images=None):
     """Send full bounded history to a fresh graph, using the DB conversation ID.
 
     Without a DB conversation, temporary UI requests keep their own UUID.
     An injected graph is for tests only; DB calls always construct a fresh graph.
+    images: 첨부 이미지(바이트 목록). 그래프의 State.image로 넘어가고, Supervisor가 multimodal을 골라 읽는다.
     """
+    try:
+        images = prepare_images(images)
+    except ValueError as error:
+        return chat_result(status="error", code="INVALID_IMAGE", message=str(error))
     if conversation_id is not None and (
         type(conversation_id) is not int or conversation_id <= 0
     ):
@@ -118,13 +174,13 @@ def run_chat(messages, *, conversation_id=None, graph=None):
     state = {
         "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
         "original_question": messages[-1]["content"],
-        "image": None, "image_analysis": "", "retrieved_docs": [],
+        "image": images or None, "image_analysis": "", "retrieved_docs": [],
         "mcp_results": [], "answer": "",
     }
     config = {"configurable": {"thread_id": str(conversation_id) if conversation_id is not None else str(uuid4())}}
     try:
         result = (graph if graph is not None else get_graph()).invoke(state, config=config)
-        if result.get("route") in ("mcp", "multimodal"):
+        if result.get("route") in ("rag", "mcp", "multimodal"):
             return unsupported_result()
         replies = result.get("messages", [])
         if not replies or not isinstance(replies[-1], AIMessage):
@@ -132,7 +188,8 @@ def run_chat(messages, *, conversation_id=None, graph=None):
         answer = text_content(result.get("answer")) or text_content(replies[-1].content)
         if not answer:
             return chat_result(status="error", code="EMPTY_RESPONSE", message="AI 답변이 비어 있습니다.")
-        return chat_result(answer, sources=document_sources(result.get("retrieved_docs")))
+        analysis = text_content(result.get("image_analysis")) if images else ""
+        return chat_result(answer, sources=result_sources(result), image_analysis=analysis or None)
     except Exception as error:
         # dev's conditional edge mapping has no destinations for these routes.
         # Recognize that existing contract failure without changing graph internals.
@@ -153,14 +210,19 @@ def run_chat(messages, *, conversation_id=None, graph=None):
         ))
 
 
-def run_db_chat(question, *, user_id, conversation_id=None):
+def run_db_chat(question, *, user_id, conversation_id=None, images=None):
     """Save the question, fetch bounded DB history once, run a fresh graph, save reply.
 
     user_id must come from authenticated session state, never from a chat input.
     A returned conversation_id lets the UI continue the same conversation even
     if the model failed after the user's question was saved.
+    images: 첨부 이미지(바이트 목록). 질문과 함께 DB에 저장하고(원본과 썸네일), 그래프로 넘겨 읽은 글(image_analysis)을 답변과 함께 저장한다.
     """
-    if not isinstance(question, str) or not question.strip() or type(user_id) is not int or user_id <= 0 or (
+    try:
+        images = prepare_images(images)
+    except ValueError as error:
+        return chat_result(status="error", code="INVALID_IMAGE", message=str(error))
+    if not isinstance(question, str) or (not question.strip() and not images) or type(user_id) is not int or user_id <= 0 or (
         conversation_id is not None and (type(conversation_id) is not int or conversation_id <= 0)
     ):
         return chat_result(status="error", code="INVALID_INPUT", message="질문과 로그인 정보를 확인해 주세요.")
@@ -168,23 +230,27 @@ def run_db_chat(question, *, user_id, conversation_id=None):
     try:
         from src.db import db_session, get_history_context, record_user_turn, record_assistant_turn
         with db_session() as session:
-            turn = record_user_turn(session, user_id, question, conversation_id=conversation_id)
+            turn = record_user_turn(session, user_id, question, conversation_id=conversation_id, images=images or None)
             history = get_history_context(session, turn.conversation_id, user_id)
         current_id = turn.conversation_id
+        if images and history and history[-1]["role"] == "user" and not history[-1]["content"].strip():
+            history[-1] = {**history[-1], "content": IMAGE_ONLY_QUESTION}  # 이미지만 올린 질문
         # history already includes the current question; do not append it again.
-        result = run_chat(history, conversation_id=current_id)
+        result = run_chat(history, conversation_id=current_id, images=images)
         result["conversation_id"] = current_id
         if result["status"] == "success":
             with db_session() as session:
                 record_assistant_turn(session, user_id, current_id, result["answer"],
-                    user_message_id=turn.message_id, sources=result["sources"])
+                    user_message_id=turn.message_id, sources=result["sources"],
+                    image_analysis=result.get("image_analysis") or None)
         return result
     except PermissionError:
         result = chat_result(status="error", code="CONVERSATION_ACCESS_DENIED",
             message="대화가 없거나 접근할 수 없습니다.")
-    except ValueError:
+    except ValueError as error:
+        # 이미지 오류(장수, 크기, 형식 등)는 그대로 알려 준다. 그 밖의 입력 오류는 기존 안내를 쓴다.
         result = chat_result(status="error", code="INVALID_INPUT",
-            message="질문 길이와 입력 정보를 확인해 주세요.")
+            message=str(error) if images else "질문 길이와 입력 정보를 확인해 주세요.")
     except Exception:
         result = chat_result(status="error", code="DB_ERROR",
             message="대화를 읽거나 저장하지 못했습니다. DB 연결 상태를 확인해 주세요.")

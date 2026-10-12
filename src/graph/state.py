@@ -29,3 +29,16 @@ class RAGState(MessagesState):
     multi_questions: NotRequired[list[str]]
     multi_questions_documents: NotRequired[list[list[Document]]]
     retry_count: NotRequired[int]
+
+
+class MCPState(MessagesState):
+    original_question: str
+    image_analysis: NotRequired[str]
+    mcp_results: NotRequired[list]
+
+    mcp_tools: NotRequired[list[dict]]
+    mcp_call: NotRequired[dict | None]
+    mcp_attempts: NotRequired[int]
+    mcp_failures: NotRequired[list[dict]]
+    mcp_error: NotRequired[dict | None]
+    mcp_outcome: NotRequired[dict | None]

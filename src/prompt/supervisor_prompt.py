@@ -16,11 +16,21 @@ SUPERVISOR_SYSTEM_PROMPT = """
                           3. mcp
                           - GitHub Issue, Repository 정보 등 외부 시스템의
                             최신 정보가 필요하거나 도구 실행이 필요한 경우 선택한다.
+                          - 사용할 수 있는 도구는 다음과 같다.
+                            · 패키지의 최신 버전과 출시일 조회 (PyPI)
+                            · 사용자가 쓰는 패키지 버전들이 서로 호환되는지 점검
+                            · LangChain, LangGraph, MCP(python-sdk) GitHub 이슈 검색, 이슈와 PR 내용 조회
+                            · 함수나 클래스가 설치된 LangChain, LangGraph, MCP에 실제로 있는지 확인
+                          - 최신 버전, 버전 호환, GitHub 이슈, 존재하는지 의심스러운 함수 이름처럼
+                            "지금 확인해야 하는 사실"이 필요할 때 선택한다.
+                            개념 설명이나 사용법은 rag가 맡는다.
 
                           4. multimodal
                           - 이미지 분석이 필요한 경우 선택한다.
                           - 코드 스크린샷, 에러 화면, 터미널 화면 등을 포함한다.
                           - 사용자가 텍스트 없이 이미지만 입력한 경우에도 선택한다.
+                          - State의 image(요약)에서 has_image가 true이고 image_analysis가 비어 있으면,
+                            다른 route보다 먼저 multimodal을 선택한다. (읽은 내용이 있어야 검색과 도구 선택을 할 수 있다.)
 
                           5. answer
                           - 필요한 정보가 충분히 확보되어 최종 답변을 생성할 수 있는 경우 선택한다.
@@ -38,5 +48,8 @@ SUPERVISOR_SYSTEM_PROMPT = """
                           - State의 completed_routes에 이미 포함된 route는 다시 선택하지 않는다.
                           - rag가 completed_routes에 있고 retrieved_docs가 비어 있지 않으면,
                             추가로 필요한 route(mcp, multimodal)가 없는 한 answer를 선택한다.
+                          - rag를 마쳤는데 retrieved_docs가 비어 있고, 질문이 특정 함수·클래스·모듈 이름의 사용법을
+                            묻고 있다면, 그 이름이 실제로 있는지 mcp로 확인한 뒤에 answer를 선택한다.
+                            (문서에서 확인되지 않은 이름을 아는 것처럼 설명하지 않기 위해서다.)
                           - 더 수행할 작업이 없다면 반드시 answer를 선택한다.
                           """

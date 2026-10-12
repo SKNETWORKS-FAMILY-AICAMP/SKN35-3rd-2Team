@@ -35,7 +35,7 @@ def test_safe_error():
     assert result["status"] == "error" and "secret-api-key" not in str(result)
 
 
-def test_unchanged_graph_history_and_unimplemented_routes(monkeypatch):
+def test_graph_history_and_connected_routes(monkeypatch):
     # Replace the existing model factory only in memory, before importing dev nodes.
     from src.const import models
     class FakeModel:
@@ -57,8 +57,17 @@ def test_unchanged_graph_history_and_unimplemented_routes(monkeypatch):
     rag_module = ModuleType("src.agent.rag_agent")
     rag_module.rag_node = lambda state: {"retrieved_docs": [], "completed_routes": ["rag"]}
     monkeypatch.setitem(sys.modules, "src.agent.rag_agent", rag_module)
-    from src.graph.workflow import workflow
-    graph = workflow()
+    from importlib import import_module
+    workflow_module = import_module("src.graph.workflow")
+    # Newly connected tool/image routes must stay offline in this contract test.
+    monkeypatch.setattr(workflow_module, "mcp_node", lambda state: {
+        "mcp_results": [], "completed_routes": ["mcp"]})
+    monkeypatch.setattr(workflow_module, "multimodal_node", lambda state: {
+        "image_analysis": "test OCR", "completed_routes": ["multimodal"]})
+    monkeypatch.setattr(workflow_module, "supervisor_node", lambda state: {
+        "route": "answer" if fake.route in (state.get("completed_routes") or []) else fake.route,
+        "reason": "test"})
+    graph = workflow_module.workflow()
     history = [{"role": "user", "content": "첫 질문"}]
     assert run_chat(history, graph=graph)["answer"] == "테스트 답변"
     history += [{"role": "assistant", "content": "테스트 답변"},
@@ -71,7 +80,7 @@ def test_unchanged_graph_history_and_unimplemented_routes(monkeypatch):
     assert run_chat(history, graph=graph)["status"] == "success"
     for route in ("mcp", "multimodal"):
         fake.route = route
-        assert run_chat(history, graph=graph)["status"] == "unsupported"
+        assert run_chat(history, graph=graph)["status"] == "success"
 
 
 def test_ui_history_reset_modes_and_errors(monkeypatch):

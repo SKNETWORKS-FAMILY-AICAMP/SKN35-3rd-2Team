@@ -3,7 +3,9 @@ from langgraph.graph import END, START, StateGraph
 
 from src.agent.answer_agent import answer_agent
 from src.agent.general_agent import general_agent
+from src.agent.mcp_agent import mcp_node
 from src.agent.rag_agent import rag_node
+from src.graph.node.multimodal.multimodal_node import multimodal_node
 from src.graph.node.supervisor_node import supervisor_node
 from src.graph.state import State
 
@@ -36,6 +38,8 @@ def workflow():
     builder.add_node("general", general_agent())
     builder.add_node("answer", answer_agent())
     builder.add_node("rag", rag_node)
+    builder.add_node("mcp", mcp_node)
+    builder.add_node("multimodal", multimodal_node)
 
     builder.add_edge(START, "reset_turn_state")
     builder.add_edge("reset_turn_state", "supervisor")
@@ -43,10 +47,12 @@ def workflow():
     builder.add_conditional_edges(
         "supervisor",
         route_from_supervisor,
-        {"rag": "rag", "general": "general", "answer": "answer"},
+        {"rag": "rag", "mcp": "mcp", "multimodal": "multimodal", "general": "general", "answer": "answer"},
     )
 
     builder.add_edge("rag", "supervisor")
+    builder.add_edge("mcp", "supervisor")
+    builder.add_edge("multimodal", "supervisor")
 
     builder.add_edge("general", END)
     builder.add_edge("answer", END)
