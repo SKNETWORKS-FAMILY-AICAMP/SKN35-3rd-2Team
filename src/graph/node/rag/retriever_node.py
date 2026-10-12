@@ -12,7 +12,7 @@ def retriever_node(state: RAGState):
         use_rerank=False,
     )
 
-    if state["multi_questions"]:
+    if state.get("multi_questions"):
         print('state["multi_questions"] : ', state["multi_questions"])
         multi_questions_documents = []
 

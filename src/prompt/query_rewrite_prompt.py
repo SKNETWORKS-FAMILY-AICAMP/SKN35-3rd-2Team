@@ -66,3 +66,15 @@ QUERY_REWRITE_PROMPT = """
                         - error_type: null
                         - is_code_error: false
                         """
+
+
+def RETRY_CONTEXT_FUNC(retry_count, previous_queries):
+    return f"""
+            현재 재시도 횟수: {retry_count}
+
+            이전 검색 쿼리:
+            {chr(10).join(f"- {query}" for query in previous_queries)}
+
+            이전 검색 쿼리와 다른 관점의 새로운 검색 쿼리를 작성하세요.
+            이전 쿼리의 단순한 표현 변경은 피하고 검색 의도를 유지하세요.
+            """
