@@ -203,7 +203,33 @@ def get_model():
     return create_nvidia_model(timeout=60)
 
 
-def generate_answer(messages, mode, *, user_id=None, conversation_id=None):
+IMAGE_TYPES = ["png", "jpg", "jpeg", "webp"]
+MAX_UPLOAD_MB = 10  # 올릴 때 한도. 2MB를 넘는 이미지는 서비스에서 자동으로 줄인다.
+DEFAULT_IMAGE_TEXT = "첨부한 이미지를 확인하고 문제의 원인과 해결 방법을 알려 주세요."
+
+
+def split_composer_value(value, *, limit=3):
+    """chat_input 값(None, 문자열, 또는 text/files를 가진 값)을 (글, 이미지 바이트 목록, 안내)로 나눈다."""
+    if value is None:
+        return "", [], None
+    if isinstance(value, str):
+        return value, [], None
+    text = getattr(value, "text", None)
+    files = getattr(value, "files", None)
+    if text is None and isinstance(value, dict):
+        text, files = value.get("text"), value.get("files")
+    images = [file.getvalue() for file in (files or [])]
+    notice = None
+    if len(images) > limit:
+        images = images[:limit]
+        notice = f"이미지는 한 번에 {limit}장까지 보낼 수 있어서 앞의 {limit}장만 사용했어요."
+    return text or "", images, notice
+
+
+def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None):
+    if images and mode != "OpenAI AI 답변":
+        return chat_result(status="error", code="IMAGE_UNSUPPORTED",
+                           message="이미지 분석은 'OpenAI AI 답변' 모드에서만 사용할 수 있어요.")
     if mode == "연습 모드":
         return chat_result(
             f"입력한 질문: {messages[-1]['content']}\n\n"
@@ -211,8 +237,9 @@ def generate_answer(messages, mode, *, user_id=None, conversation_id=None):
         )
     if mode == "OpenAI AI 답변":
         if user_id is not None:
-            return run_db_chat(messages[-1]["content"], user_id=user_id, conversation_id=conversation_id)
-        return run_chat(messages)
+            return run_db_chat(messages[-1]["content"], user_id=user_id, conversation_id=conversation_id,
+                               images=images)
+        return run_chat(messages, images=images) if images else run_chat(messages)
     if mode != "NVIDIA AI 답변":
         return chat_result(status="error", code="INVALID_MODE", message="답변 모드를 확인해 주세요.")
     try:
@@ -285,6 +312,8 @@ def load_saved_conversation(conversation_id):
         with db.db_session() as session:
             rows = db.list_messages(session, conversation_id, owner)
             messages = [{"role": row.role, "content": row.content or "",
+                         "images": [a.thumb_data for a in row.attachments if a.thumb_data],
+                         "image_analysis": row.image_analysis,
                          "sources": [{name: getattr(source, name) for name in
                                       ("url", "title", "tech", "version", "doc_type", "snippet", "score", "is_grounded")}
                                      for source in sorted(row.sources, key=lambda source: source.rank)]}
@@ -469,7 +498,7 @@ def render_sidebar():
                     st.selectbox("시안 화면", ["실제 채팅", "오류 분석 예시", "추가 정보 요청 예시"], key="ui_preview")
                     st.caption("예시 화면은 API를 호출하거나 대화를 저장하지 않습니다.")
                 with st.expander("현재 사용할 수 있는 기능"):
-                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석: 준비 중")
+                    st.markdown("- 일반 질문과 후속 질문\n- 연습 모드: API 호출 없이 화면 확인\n- 문서 검색·외부 조회·이미지 분석(스크린샷 첨부)")
             render_authentication()
     return mode
 
@@ -500,7 +529,16 @@ def render_welcome_body():
 def render_message(message, index):
     if message["role"] == "user":
         text = message.get("display_content", message["content"])
+        if message.get("images") and text == DEFAULT_IMAGE_TEXT:
+            text = "(이미지만 첨부했어요)"
         st.html(f'<div class="ui-user"><pre>{escape(text)}</pre></div>')
+        if message.get("images"):
+            for column, data in zip(st.columns(max(len(message["images"]), 3)), message["images"]):
+                column.image(data, use_container_width=True)
+        if message.get("image_analysis"):
+            with st.expander("이미지에서 읽은 내용", icon=":material/image_search:"):
+                st.text(message["image_analysis"])
+                st.caption("읽은 내용이 틀렸다면 바로잡아서 다시 질문해 주세요.")
         return
     with st.container(key=f"reply_{index}"):
         st.html(f'<div class="ui-assistant"><div class="ui-assistant-icon">{icon("assistant",16)}</div>CodeClue</div>')
@@ -575,10 +613,10 @@ def render_composer(preview):
                 st.caption("선택한 환경은 다음 질문에 함께 전달됩니다. 입력 전에는 버전을 가정하지 않습니다.")
             with st.container(key="composer_box"):
                 prompt = st.chat_input("에러 메시지와 관련 코드를 입력해 주세요.", key="chat_input",
-                                       submit_mode="disable", height=43, disabled=preview)
+                                       submit_mode="disable", height=43, disabled=preview,
+                                       accept_file="multiple", file_type=IMAGE_TYPES, max_upload_size=MAX_UPLOAD_MB)
                 with st.container(key="composer_tools", horizontal=True, horizontal_alignment="distribute"):
-                    st.button("이미지 첨부 · 준비 중", key="attachment_pending",
-                              icon=":material/add_photo_alternate:", disabled=True)
+                    st.caption("이미지는 3장까지 · png, jpg, webp")
                     st.caption("Shift + Enter 줄바꿈")
             st.caption("실제 코드와 공식 원문을 확인해 주세요. API 키·비밀번호는 입력하지 마세요.")
     return prompt
@@ -592,12 +630,16 @@ def environment_question(prompt):
     return prompt + ("\n\n[사용자가 제공한 개발 환경]\n" + "\n".join(values) if values else "")
 
 
-def send_question(prompt, mode, *, prepared=None):
-    user_message = prepared or {"role": "user", "content": environment_question(prompt), "display_content": prompt}
+def send_question(prompt, mode, *, prepared=None, images=None):
+    if prepared is not None:
+        images = prepared.get("images")
+    user_message = prepared or {"role": "user", "content": environment_question(prompt or DEFAULT_IMAGE_TEXT),
+                                "display_content": prompt or DEFAULT_IMAGE_TEXT, "images": images or []}
     with st.spinner("입력을 확인하는 중…" if mode == "연습 모드" else "답변을 작성하고 있어요…", show_time=True):
         result = generate_answer(st.session_state.messages + [user_message], mode,
                                  user_id=st.session_state.get("user_id"),
-                                 conversation_id=st.session_state.get("conversation_id"))
+                                 conversation_id=st.session_state.get("conversation_id"),
+                                 images=images or None)
     if result.get("conversation_id") is not None:
         st.session_state.conversation_id = result["conversation_id"]
     persisted = False
@@ -643,7 +685,7 @@ def render_chat():
             if mode == "연습 모드":
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
-                st.caption("현재 일반 답변을 제공합니다. 공식 문서 검색·외부 조회·이미지 분석은 준비 중입니다.")
+                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석을 제공합니다.")
             if not st.session_state.messages and not st.session_state.ui_failure:
                 render_welcome()
             for index, message in enumerate(st.session_state.messages):
@@ -663,8 +705,12 @@ def render_chat():
                     else:
                         st.caption("질문이 DB에 저장됐을 수 있습니다. 중복 저장 방지를 위해 같은 질문의 자동 재시도는 제공하지 않습니다.")
                 st.caption("입력 내용은 위에 유지됩니다. 실패 안내는 AI 답변으로 저장하지 않습니다.")
-    prompt = render_composer(preview)
-    if prompt and prompt.strip() and not preview:
+    value = render_composer(preview)
+    prompt, images, notice = split_composer_value(value)
+    prompt = prompt.strip()
+    if notice:
+        st.warning(notice)
+    if (prompt or images) and not preview:
         body.empty()
         st.html('<style>.st-key-welcome_intro {display:none!important;}</style>')
         with body.container():
@@ -673,6 +719,7 @@ def render_chat():
                     render_message(message, index)
                 else:
                     st.markdown(message["content"])
-            render_message({"role": "user", "content": prompt.strip()}, len(st.session_state.messages))
-            send_question(prompt.strip(), mode)
+            render_message({"role": "user", "content": prompt or DEFAULT_IMAGE_TEXT, "images": images},
+                           len(st.session_state.messages))
+            send_question(prompt, mode, images=images)
 

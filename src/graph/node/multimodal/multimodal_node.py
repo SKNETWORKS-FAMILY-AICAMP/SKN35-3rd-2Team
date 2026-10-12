@@ -40,10 +40,14 @@ def _question_text(state: dict) -> str:
 
 
 def multimodal_node(state):
+    # completed_routes에 "multimodal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
+    # Supervisor는 이 목록을 보고 이미 끝낸 route를 다시 고르지 않는다.
+    completed = [*(state.get("completed_routes") or []), "multimodal"]
+
     # 1) 이미지 검사: 읽을 수 있는 이미지만 남긴다
     images, notes = validate_images(state.get("image"))
     if not images:
-        return {"image_analysis": build_analysis(None, notes)}
+        return {"image_analysis": build_analysis(None, notes), "completed_routes": completed}
 
     # 2) 큰 이미지 줄이기
     images, resize_notes = resize_images(images)
@@ -57,7 +61,7 @@ def multimodal_node(state):
         raw_text = read_images(parts, _question_text(state))
     except Exception as exc:  # 네트워크, 한도, 키 오류 등으로 그래프 전체가 죽지 않게 한다
         notes.append(f"이미지 분석에 실패했습니다: {type(exc).__name__}: {mask_secrets(str(exc))[:300]}")
-        return {"image_analysis": build_analysis(None, notes)}
+        return {"image_analysis": build_analysis(None, notes), "completed_routes": completed}
 
     # 5) 항목이 있는 글로 정리
-    return {"image_analysis": build_analysis(raw_text, notes)}
+    return {"image_analysis": build_analysis(raw_text, notes), "completed_routes": completed}

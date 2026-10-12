@@ -191,7 +191,7 @@ def test_build_prepends_notes_and_clips():
 def test_node_full_pipeline_with_fake_model(fake_model):
     state = {"original_question": "이 오류 어떻게 해결해?", "image": [make_image(), make_image("JPEG")]}
     result = multimodal_node(state)
-    assert list(result) == ["image_analysis"]
+    assert set(result) == {"image_analysis", "completed_routes"} and result["completed_routes"] == ["multimodal"]
     assert "ModuleNotFoundError" in result["image_analysis"]
 
     assert len(fake_model.calls) == 1  # 이미지가 여러 장이어도 모델은 한 번만 부른다
@@ -214,7 +214,7 @@ def test_node_image_only_question(fake_model):
 
 
 def test_node_no_image_does_not_call_model(fake_model):
-    assert multimodal_node({"original_question": "q"}) == {"image_analysis": cfg.NO_IMAGE_NOTICE}
+    assert multimodal_node({"original_question": "q"}) == {"image_analysis": cfg.NO_IMAGE_NOTICE, "completed_routes": ["multimodal"]}
     assert fake_model.calls == []
 
 
@@ -246,3 +246,13 @@ def test_node_notes_about_skipped_and_resized(fake_model):
     assert "이미지 2은(는) 크기가 커서" in result
     sent = fake_model.calls[0][0][1]["content"]
     assert "[이미지 2]" in [p.get("text") for p in sent] and "[이미지 1]" not in [p.get("text") for p in sent]
+
+
+# ---------------------------------------------------------------- completed_routes (Supervisor가 끝난 route를 알게 한다)
+def test_node_adds_multimodal_to_the_completed_routes_in_every_case(fake_model, monkeypatch):
+    ok = multimodal_node({"original_question": "q", "image": make_image(), "completed_routes": ["rag"]})
+    assert ok["completed_routes"] == ["rag", "multimodal"]  # 앞선 route는 그대로 둔다
+    assert multimodal_node({"original_question": "q"})["completed_routes"] == ["multimodal"]  # 이미지가 없을 때
+    assert multimodal_node({"original_question": "q", "image": [b"junk"]})["completed_routes"] == ["multimodal"]  # 모두 건너뛴 경우
+    monkeypatch.setattr(read_images_module, "create_openai_model", lambda **kwargs: FakeModel(error=RuntimeError("boom")))
+    assert multimodal_node({"original_question": "q", "image": make_image()})["completed_routes"] == ["multimodal"]  # 모델 호출이 실패한 경우
