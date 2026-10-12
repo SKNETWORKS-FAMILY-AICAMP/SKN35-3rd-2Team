@@ -114,3 +114,14 @@ def test_each_turn_starts_without_old_mcp_results(monkeypatch):
     run(graph, thread="same")
     graph.invoke(initial("다음 질문"), config={"configurable": {"thread_id": "same"}})
     assert supervisor.seen[-1] == []  # 두 번째 질문의 첫 Supervisor 호출 때 완료 목록이 비어 있다
+
+
+def test_multimodal_route_returns_to_supervisor_and_is_recorded(monkeypatch):
+    """supervisor가 multimodal → rag → answer로 고르면 multimodal 노드를 거쳐 supervisor로 돌아오고 completed_routes에 남는다."""
+    supervisor = FakeSupervisor(["multimodal", "rag", "answer"])
+    monkeypatch.setattr(workflow_module, "multimodal_node", lambda state: {"image_analysis": "읽음", "completed_routes": [*(state.get("completed_routes") or []), "multimodal"]})
+    graph = build(monkeypatch, supervisor)
+    path, result = run(graph)
+    assert path[:5] == ["reset_turn_state", "supervisor", "multimodal", "supervisor", "rag"]
+    assert supervisor.seen[1] == ["multimodal"] and supervisor.seen[2] == ["multimodal", "rag"]
+    assert result["image_analysis"] == "읽음"
