@@ -5,8 +5,6 @@ from src.prompt.context_compressor_prompt import CONTEXT_COMPRESSOR_SYSTEM_PROMP
 
 model = create_openai_model()
 
-NO_RELEVANT_CONTENT = "관련 내용 없음"
-
 
 def context_compressor(
     question: str,
@@ -49,7 +47,7 @@ def context_compressor(
 
             content = content.strip()
 
-            is_irrelevant = (not content) or content.startswith(NO_RELEVANT_CONTENT)
+            is_irrelevant = (not content) or content.startswith("관련 내용 없음")
 
             if is_irrelevant:
                 print(f"무관 문서 제외: {title}")
