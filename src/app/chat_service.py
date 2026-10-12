@@ -1,4 +1,6 @@
 """UI adapter for the unchanged team graph; no retrieval or routing implementation."""
+from math import isfinite
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
@@ -25,6 +27,66 @@ def chat_result(answer="", *, status="success", code=None, message=None, sources
         "image_analysis": image_analysis,
         "error": {"code": code, "message": message} if code else None,
     }
+
+
+def document_sources(documents, mcp_results=None):
+    """Convert final graph Documents to DB-compatible reference metadata.
+
+    These are documents supplied to the answer node, not verified citations.
+    Missing URLs are omitted; no links, versions or grounding claims are invented.
+    """
+    sources = []
+    seen = set()
+    for document in documents or []:
+        metadata = document.get("metadata") if isinstance(document, dict) else getattr(document, "metadata", None)
+        if not isinstance(metadata, dict):
+            continue
+        url = None
+        for key in ("source_url", "url", "github_url"):
+            candidate = metadata.get(key)
+            if not isinstance(candidate, str):
+                continue
+            candidate = candidate.strip()
+            try:
+                parsed = urlsplit(candidate)
+                if parsed.scheme in ("http", "https") and parsed.hostname and len(candidate) <= 1000:
+                    url = candidate
+                    break
+            except ValueError:
+                continue
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        source = {"url": url}
+        for output, keys, limit in (
+            ("title", ("title",), 300),
+            ("tech", ("technology", "tech"), 30),
+            ("version", ("version",), 30),
+            ("doc_type", ("document_type", "doc_type"), 30),
+        ):
+            for key in keys:
+                value = metadata.get(key)
+                if isinstance(value, str) and value.strip():
+                    source[output] = value.strip()[:limit]
+                    break
+        content = document.get("page_content") if isinstance(document, dict) else getattr(document, "page_content", None)
+        if isinstance(content, str) and content.strip():
+            source["snippet"] = content.strip()[:1000]
+        for key in ("rerank_score", "score"):
+            score = metadata.get(key)
+            if isinstance(score, (int, float)) and not isinstance(score, bool) and isfinite(score):
+                source["score"] = float(score)
+                break
+        sources.append(source)
+    # Use the team's shared limits and masking after adapting legacy metadata.
+    from src.db import build_sources
+    documents = [{"metadata": {
+        "source_url": source["url"], "title": source.get("title"),
+        "technology": source.get("tech"), "version": source.get("version"),
+        "document_type": source.get("doc_type"), "score": source.get("score"),
+    }, "page_content": source.get("snippet")} for source in sources]
+    return [{key: value for key, value in source.items() if value is not None}
+            for source in build_sources(documents, mcp_results)]
 
 
 # 이미지만 올리고 질문을 쓰지 않았을 때 그래프에 넘기는 질문
@@ -73,7 +135,7 @@ def get_graph():
 
 def unsupported_result():
     return chat_result(status="unsupported", code="UNSUPPORTED_ROUTE", message=
-        "문서 검색·외부 조회·이미지 분석은 준비 중입니다. 현재는 일반 질문에 답변합니다.")
+        "요청한 처리 단계가 완료되지 않아 답변을 만들지 못했습니다. 그래프 연결과 종료 조건을 확인해 주세요.")
 
 
 def result_sources(result):
@@ -84,7 +146,7 @@ def result_sources(result):
     try:
         from src.db import build_sources
 
-        return build_sources(result.get("retrieved_docs"), result.get("mcp_results"))
+        return document_sources(result.get("retrieved_docs"), result.get("mcp_results"))
     except Exception:
         return []
 
@@ -131,8 +193,12 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None):
     except Exception as error:
         # dev's conditional edge mapping has no destinations for these routes.
         # Recognize that existing contract failure without changing graph internals.
-        if isinstance(error, KeyError) and error.args in (("rag",), ("mcp",), ("multimodal",)):
+        if isinstance(error, KeyError) and error.args in (("mcp",), ("multimodal",)):
             return unsupported_result()
+        if type(error).__name__ == "GraphRecursionError":
+            return chat_result(status="error", code="GRAPH_RECURSION_LIMIT", message=
+                "처리 단계 한도에 도달해 답변을 완료하지 못했습니다. "
+                "재검색 횟수와 그래프 종료 조건을 확인해 주세요.")
         notices = {
             "AuthenticationError": "OpenAI 인증에 실패했습니다. API 키를 확인해 주세요.",
             "RateLimitError": "OpenAI 사용 한도 또는 요청 제한에 도달했습니다.",

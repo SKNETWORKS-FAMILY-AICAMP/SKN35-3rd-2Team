@@ -259,7 +259,8 @@ def generate_answer(messages, mode, *, user_id=None, conversation_id=None, image
 def render_sources(sources):
     if not sources:
         return
-    with st.expander("참고 근거", icon=":material/library_books:"):
+    with st.expander("참고 자료", icon=":material/library_books:"):
+        st.caption("답변 생성에 전달된 검색 문서입니다. 각 문서가 답변을 뒷받침하는지는 별도 확인이 필요합니다.")
         for index, source in enumerate(sources, 1):
             with st.container(border=True):
                 st.markdown(f"**[{index}] {source.get('title') or '참고 문서'}**")
@@ -695,7 +696,7 @@ def render_chat():
             if mode == "연습 모드":
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
-                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석을 제공합니다.")
+                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석을 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다.")
             if not st.session_state.messages and not st.session_state.ui_failure:
                 render_welcome()
             for index, message in enumerate(st.session_state.messages):
