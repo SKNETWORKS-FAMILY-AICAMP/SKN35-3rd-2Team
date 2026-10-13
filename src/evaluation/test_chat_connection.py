@@ -94,6 +94,8 @@ def test_ui_history_reset_modes_and_errors(monkeypatch):
         if question == "실패":
             return chat_result(status="error", code="GRAPH_ERROR", message="실패 안내")
         return chat_result("테스트 답변")
+    # AppTest has no browser JavaScript; storage restoration is tested separately.
+    monkeypatch.setattr(chat, "restore_login", lambda: None)
     monkeypatch.setattr(chat, "run_chat", respond)
     app = AppTest.from_file(str(ROOT / "main.py"), default_timeout=15).run()
     assert not app.exception
