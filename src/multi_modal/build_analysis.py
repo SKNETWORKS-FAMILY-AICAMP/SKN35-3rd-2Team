@@ -3,7 +3,7 @@
 
 모델이 읽은 글 + 안내 문구  -->  [이 단계]  -->  State.image_analysis에 넣을 문자열 하나
 
-결과 모양 (항목 제목은 src/const/multimodal_config.py의 SECTION_HEADINGS):
+결과 모양 (항목 제목은 src/const/multi_modal_config.py의 SECTION_HEADINGS):
     ※ (처리 중 남긴 안내 문구가 있으면 맨 앞에)
 
     [화면 설명]
@@ -19,7 +19,7 @@
 """
 
 from src.const import db_config as limits
-from src.const import multimodal_config as cfg
+from src.const import multi_modal_config as cfg
 from src.db.masking import mask_secrets
 
 

@@ -13,7 +13,7 @@ State.mcp_tools + 질문  -->  [이 노드]  -->  State.mcp_call ({"display_name
 
 from src.const import mcp_config as cfg
 from src.const.models import create_openai_model
-from src.const.multimodal_config import NO_IMAGE_NOTICE
+from src.const.multi_modal_config import NO_IMAGE_NOTICE
 from src.mcp_integration.client.tools import describe_error
 from src.prompt.mcp_prompt import MCP_RETRY_NOTICE, MCP_SELECT_SYSTEM_PROMPT
 

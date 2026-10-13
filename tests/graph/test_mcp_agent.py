@@ -12,7 +12,7 @@ from langgraph.graph import END, START, StateGraph
 import src.agent.mcp_agent as agent_module
 from src.agent.mcp_agent import mcp_agent, mcp_node, route_on_error
 from src.const import mcp_config as cfg
-from src.const.multimodal_config import NO_IMAGE_NOTICE
+from src.const.multi_modal_config import NO_IMAGE_NOTICE
 from src.graph.node.mcp import call_tool_node as call_module
 from src.graph.node.mcp import list_tools_node as list_module
 from src.graph.node.mcp import select_tool_node as select_module
