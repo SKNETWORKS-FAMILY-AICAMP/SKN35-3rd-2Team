@@ -86,7 +86,7 @@ def test_graph_history_and_connected_routes(monkeypatch):
 def test_ui_history_reset_modes_and_errors(monkeypatch):
     from src.app import chat
     calls = []
-    def respond(messages):
+    def respond(messages, **kwargs):
         calls.append(messages)
         question = messages[-1]["content"]
         if question == "미지원":
@@ -94,6 +94,8 @@ def test_ui_history_reset_modes_and_errors(monkeypatch):
         if question == "실패":
             return chat_result(status="error", code="GRAPH_ERROR", message="실패 안내")
         return chat_result("테스트 답변")
+    # AppTest has no browser JavaScript; storage restoration is tested separately.
+    monkeypatch.setattr(chat, "restore_login", lambda: None)
     monkeypatch.setattr(chat, "run_chat", respond)
     app = AppTest.from_file(str(ROOT / "main.py"), default_timeout=15).run()
     assert not app.exception
@@ -107,8 +109,12 @@ def test_ui_history_reset_modes_and_errors(monkeypatch):
     assert app.info and app.session_state["messages"] == []
     app.chat_input[0].set_value("실패").run()
     assert app.error and app.session_state["messages"] == []
-    app.selectbox[0].select("연습 모드").run()
+    app.button[0].click().run()
+    app.session_state["answer_mode"] = "연습 모드"
+    app.run()
     app.chat_input[0].set_value("연습").run()
     assert len(app.session_state["messages"]) == 2
-    app.selectbox[0].select("OpenAI AI 답변").run()
+    app.button[0].click().run()
+    app.session_state["answer_mode"] = "OpenAI AI 답변"
+    app.run()
     assert not app.exception and app.session_state["messages"] == []

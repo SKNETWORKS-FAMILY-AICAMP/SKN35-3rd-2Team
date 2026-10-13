@@ -7,6 +7,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src import db
+from src.app.browser_auth import forget_login, remember_login, restore_login
 
 from src.const.config import OPEN_MODEL
 from src.app.chat_service import chat_result, run_chat, run_db_chat, text_content
@@ -389,6 +390,7 @@ def clear_account_view():
 
 
 def logout():
+    forget_login()
     clear_account_view()
     st.session_state.pop("user_id", None)
     st.session_state.pop("username", None)
@@ -509,7 +511,7 @@ def render_auth_form(action):
     st.button("회원가입" if action == "로그인" else "로그인으로 돌아가기",
               key="auth_switch", width="stretch", on_click=switch_auth,
               args=("회원가입" if action == "로그인" else "로그인",))
-    st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다.  \n새로고침 후에는 다시 로그인할 수 있습니다.",
+    st.caption("새로고침해도 로그인 상태가 유지됩니다.  \n로그아웃하거나 브라우저 탭을 닫으면 로그인이 종료됩니다. (최대 24시간)",
                text_alignment="center" if action == "로그인" else "left")
     if submitted:
         if not username.strip() or not password:
@@ -542,6 +544,11 @@ def render_auth_form(action):
         elif identity is None:
             st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
         else:
+            try:
+                remember_login(identity)
+            except Exception:
+                st.error("로그인 상태를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+                return
             # Widget keys are cleared by the form; preserve no password in identity.
             reset_conversation()
             st.session_state.ui_history = {}
@@ -782,6 +789,7 @@ def send_question(prompt, mode, *, prepared=None, images=None):
 
 
 def render_chat():
+    restore_login()
     defaults = {"messages": [], "ui_history": {}, "ui_thread": str(uuid4()), "ui_failure": None,
                 "answer_mode": "OpenAI AI 답변", "ui_preview": "실제 채팅"}
     for key, value in defaults.items():
