@@ -39,7 +39,7 @@ def workflow():
     builder.add_node("answer", answer_agent())
     builder.add_node("rag", rag_node)
     builder.add_node("mcp", mcp_node)
-    builder.add_node("multimodal", multi_modal_agent())
+    builder.add_node("multi_modal", multi_modal_agent())
 
     builder.add_edge(START, "reset_turn_state")
     builder.add_edge("reset_turn_state", "supervisor")
@@ -47,12 +47,18 @@ def workflow():
     builder.add_conditional_edges(
         "supervisor",
         route_from_supervisor,
-        {"rag": "rag", "mcp": "mcp", "multimodal": "multimodal", "general": "general", "answer": "answer"},
+        {
+            "rag": "rag",
+            "mcp": "mcp",
+            "multi_modal": "multi_modal",
+            "general": "general",
+            "answer": "answer",
+        },
     )
 
     builder.add_edge("rag", "supervisor")
     builder.add_edge("mcp", "supervisor")
-    builder.add_edge("multimodal", "supervisor")
+    builder.add_edge("multi_modal", "supervisor")
 
     builder.add_edge("general", END)
     builder.add_edge("answer", END)
