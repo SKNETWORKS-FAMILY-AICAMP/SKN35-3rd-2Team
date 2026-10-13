@@ -151,7 +151,7 @@ def result_sources(result):
         return []
 
 
-def run_chat(messages, *, conversation_id=None, graph=None, images=None):
+def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_token=None):
     """Send full bounded history to a fresh graph, using the DB conversation ID.
 
     Without a DB conversation, temporary UI requests keep their own UUID.
@@ -179,7 +179,26 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None):
     }
     config = {"configurable": {"thread_id": str(conversation_id) if conversation_id is not None else str(uuid4())}}
     try:
-        result = (graph if graph is not None else get_graph()).invoke(state, config=config)
+        engine = graph if graph is not None else get_graph()
+        if on_token is None:
+            result = engine.invoke(state, config=config)
+        else:
+            result = dict(state)
+            for kind, event in engine.stream(state, config=config, stream_mode=["messages", "updates"]):
+                if kind == "messages":
+                    chunk, metadata = event
+                    if metadata.get("langgraph_node") in ("answer", "general", "answer_node", "general_node"):
+                        content = chunk.content
+                        token = content if isinstance(content, str) else "".join(
+                            block.get("text", "") for block in content
+                            if isinstance(block, dict) and block.get("type") in ("text", "output_text")
+                        )
+                        if token:
+                            on_token(token)
+                elif kind == "updates":
+                    for update in event.values():
+                        if isinstance(update, dict):
+                            result.update(update)
         if result.get("route") in ("rag", "mcp", "multimodal"):
             return unsupported_result()
         replies = result.get("messages", [])
@@ -210,7 +229,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None):
         ))
 
 
-def run_db_chat(question, *, user_id, conversation_id=None, images=None):
+def run_db_chat(question, *, user_id, conversation_id=None, images=None, on_token=None):
     """Save the question, fetch bounded DB history once, run a fresh graph, save reply.
 
     user_id must come from authenticated session state, never from a chat input.
@@ -236,7 +255,7 @@ def run_db_chat(question, *, user_id, conversation_id=None, images=None):
         if images and history and history[-1]["role"] == "user" and not history[-1]["content"].strip():
             history[-1] = {**history[-1], "content": IMAGE_ONLY_QUESTION}  # 이미지만 올린 질문
         # history already includes the current question; do not append it again.
-        result = run_chat(history, conversation_id=current_id, images=images)
+        result = run_chat(history, conversation_id=current_id, images=images, on_token=on_token)
         result["conversation_id"] = current_id
         if result["status"] == "success":
             with db_session() as session:
