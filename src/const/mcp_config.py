@@ -57,6 +57,8 @@ LIST_TOOLS_TIMEOUT_SECONDS = 30  # 서버를 띄우고 도구 목록을 받는 �
 # 질문마다 다시 받지 않는다. 도구를 추가했을 때는 앱을 다시 실행하거나 이 시간이 지나기를 기다린다.
 TOOLS_CACHE_SECONDS = 300
 CALL_TOOL_TIMEOUT_SECONDS = 30  # 도구 한 번 호출의 시간 제한
+# 서버를 한 번만 띄워 두고 재사용한다 (호출마다 약 2초 절약). 문제가 생기면 False로 하면 예전처럼 호출마다 띄운다.
+REUSE_SERVER_CONNECTION = True
 
 # 도구가 돌려준 글이 이보다 길면 잘라서 State에 담는다 (answer 노드의 토큰이 커지는 것을 막는다)
 MAX_RESULT_CHARS = 8_000
