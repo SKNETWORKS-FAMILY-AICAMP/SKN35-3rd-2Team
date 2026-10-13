@@ -12,7 +12,7 @@ def main():
         page_title="CodeClue",
         page_icon=str(Path(__file__).resolve().parent / "assets" / "codeclue-favicon.png"),
         layout="wide",
-        initial_sidebar_state="auto",
+        initial_sidebar_state="expanded",
     )
     render_chat()
 

@@ -69,7 +69,9 @@ STYLE = """
 .st-key-example_0 [data-testid="stVerticalBlock"],.st-key-example_1 [data-testid="stVerticalBlock"],.st-key-example_2 [data-testid="stVerticalBlock"] {gap:8px;}
 [data-testid="stSidebar"] button[kind="primary"] p {color:white;}
 [data-testid="stBottomBlockContainer"] {max-width:904px;margin:auto;padding:8px 2rem 16px;}
-[data-testid="stBottom"] {background:var(--ui-bg);}
+[data-testid="stBottom"],
+[data-testid="stBottom"] > div,
+[data-testid="stBottomBlockContainer"] {background:var(--ui-bg)!important;}
 [data-testid="stMarkdownContainer"] p,[data-testid="stMarkdownContainer"] li {line-height:1.65;overflow-wrap:anywhere;}
 .stApp pre {overflow-x:auto;}
 .st-key-example_0,.st-key-example_1,.st-key-example_2 {background:white;border-radius:16px;gap:8px!important;}
@@ -173,16 +175,85 @@ STYLE = """
  font-size:13px!important;line-height:1.5!important;
  box-shadow:0 4px 12px rgba(15,23,42,.18)!important;}
 
+/* Requested toolbar removal includes its reserved height. */
+[data-testid="stHeader"] {height:0!important;min-height:0!important;background:transparent!important;overflow:visible!important;}
+[data-testid="stToolbar"] {height:0!important;min-height:0!important;overflow:visible!important;pointer-events:none;}
+[data-testid="stToolbar"] > div > div:last-child:not(:first-child) {display:none!important;}
+[data-testid="stMainMenu"], [data-testid="stDecoration"], [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"] {display:none!important;}
+[data-testid="stExpandSidebarButton"] {
+ position:fixed!important;top:8px!important;left:8px!important;
+ display:flex!important;visibility:visible!important;opacity:1!important;
+ pointer-events:auto!important;z-index:1000001!important;}
+[data-testid="stMainBlockContainer"] {padding-top:1rem!important;}
+[data-testid="stSidebarCollapsedControl"] {
+ position:fixed!important;top:8px!important;left:8px!important;
+ width:40px!important;height:40px!important;overflow:visible!important;
+ visibility:visible!important;opacity:1!important;z-index:1000001!important;}
+[data-testid="stSidebarCollapsedControl"] button {visibility:visible!important;opacity:1!important;}
+.st-key-sidebar_header [data-testid="stTextInput"] input {text-align:center;}
+.st-key-composer [data-testid="stChatInput"] textarea,
+.st-key-composer [data-testid="stChatInput"] [data-baseweb="textarea"] {background:var(--ui-bg)!important;}
+.ui-draft-code {padding:12px;max-height:192px;overflow:auto;}
+.ui-draft-code pre {white-space:pre-wrap;background:var(--ui-panel);padding:12px;border-radius:8px;}
+/* Native code blocks keep their copy action visible, including while streaming. */
+[data-testid="stCode"] {
+ background:#F0F0F0;border:1px solid #E2E2E2;border-radius:20px;
+ padding-top:42px;overflow:hidden;}
+[data-testid="stCode"]::before {
+ content:attr(data-code-language);position:absolute;top:14px;left:20px;
+ font-size:13px;font-weight:500;color:var(--ui-ink);}
+[data-testid="stCode"] pre {background:transparent!important;border-radius:0!important;padding:16px 20px!important;}
+[data-testid="stCode"] > div:last-child:has(button) {
+ opacity:1!important;visibility:visible!important;pointer-events:auto!important;
+ transition:none!important;top:0!important;right:0!important;padding:8px 12px!important;}
+[class*="st-key-user_message_"] {background:var(--ui-panel);border-radius:16px;padding:12px 20px;margin-left:auto;max-width:90%;}
 </style>
 """
 
 
-UPLOAD_TOOLTIP = """
+UPLOAD_TOOLTIP = r"""
 <script>
 (() => {
+  if (window.codeclueCopyHandler) {
+    document.removeEventListener("click", window.codeclueCopyHandler);
+    delete window.codeclueCopyHandler;
+  }
+  if (window.codeclueDraftHandler) document.removeEventListener("input", window.codeclueDraftHandler);
+  window.codeclueDraftHandler = event => {
+    const textarea = event.target;
+    if (!textarea.matches('.st-key-composer textarea')) return;
+    const host = textarea.closest('[data-testid="stChatInput"]');
+    let preview = host.querySelector('.ui-draft-code');
+    const fences = [...textarea.value.matchAll(/```([^\n`]*)\n([\s\S]*?)(?:```|$)/g)];
+    if (!fences.length) { if (preview) preview.remove(); return; }
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.className = 'ui-draft-code';
+      preview.setAttribute('aria-label', '입력 코드 미리보기');
+      host.appendChild(preview);
+    }
+    preview.replaceChildren();
+    for (const match of fences) {
+      const label = document.createElement('small');
+      label.textContent = match[1] || '코드';
+      const pre = document.createElement('pre');
+      pre.textContent = match[2];
+      preview.append(label, pre);
+    }
+  };
+  document.addEventListener("input", window.codeclueDraftHandler);
   // Streamlit exposes no upload-tooltip parameter. Update only its native tooltip.
   const label = "Upload or drag files (PNG, JPG, WEBP). Up to 3 images.";
   const update = () => {
+    document.querySelectorAll('[data-testid="stCode"]').forEach(block => {
+      const code = block.querySelector('code');
+      const languageClass = code && [...code.classList].find(name => name.startsWith('language-'));
+      const language = languageClass ? languageClass.slice(9) : '';
+      const shell = /^(?:\s*\$\s*)?(?:pip(?:3)?\s|python(?:3)?\s+-m\s+pip\s|npm\s|uv\s|conda\s)/m.test(code ? code.textContent : '');
+      const label = /^(bash|sh|shell|console|shell-session)$/.test(language) || (!language && shell)
+        ? 'Bash' : language ? language.charAt(0).toUpperCase() + language.slice(1) : '코드';
+      if (block.dataset.codeLanguage !== label) block.dataset.codeLanguage = label;
+    });
     document.querySelectorAll('[role="tooltip"], [data-testid="stTooltipContent"]').forEach(el => {
       if (el.textContent.trim().startsWith("Upload or drag")) {
         el.classList.add("codeclue-upload-tooltip");
@@ -242,7 +313,7 @@ def split_composer_value(value, *, limit=3):
     return text or "", images, notice
 
 
-def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None):
+def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None, on_token=None):
     if images and mode != "OpenAI AI 답변":
         return chat_result(status="error", code="IMAGE_UNSUPPORTED",
                            message="이미지 분석은 'OpenAI AI 답변' 모드에서만 사용할 수 있어요.")
@@ -254,16 +325,21 @@ def generate_answer(messages, mode, *, user_id=None, conversation_id=None, image
     if mode == "OpenAI AI 답변":
         if user_id is not None:
             return run_db_chat(messages[-1]["content"], user_id=user_id, conversation_id=conversation_id,
-                               images=images)
-        return run_chat(messages, images=images) if images else run_chat(messages)
+                               images=images, on_token=on_token)
+        return run_chat(messages, images=images, on_token=on_token)
     if mode != "NVIDIA AI 답변":
         return chat_result(status="error", code="INVALID_MODE", message="답변 모드를 확인해 주세요.")
     try:
-        response = get_model().invoke(
+        response_stream = get_model().stream(
             [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
             + [{"role": m["role"], "content": m["content"]} for m in messages]
         )
-        answer = text_content(response.content)
+        answer = ""
+        for chunk in response_stream:
+            token = chunk.content if isinstance(chunk.content, str) else text_content(chunk.content)
+            answer += token
+            if on_token and token:
+                on_token(token)
         if not answer:
             raise ValueError("빈 응답")
         return chat_result(answer)
@@ -364,7 +440,7 @@ def render_saved_history(query):
         return
     visible = [item for item in items if query.casefold() in item["title"].casefold()]
     if not visible:
-        st.caption("아직 저장된 대화가 없어요." if not query else "검색 결과가 없어요.")
+        st.caption("아직 저장된 대화가 없어요." if not query else "검색 결과가 없어요.", text_alignment="center")
     period = None
     for item in visible:
         current = history_period(item["updated"])
@@ -419,15 +495,25 @@ def switch_auth(action):
 def render_auth_form(action):
     if st.session_state.pop("auth_registered", False):
         st.success("회원가입이 완료되었습니다. 로그인해 주세요.")
-    st.caption("아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상")
+    guidance = "아이디: 영문 소문자·숫자·밑줄 3~30자 / 비밀번호: 8자 이상"
+    guidance_slot = st.empty()
+    if action == "회원가입":
+        guidance_slot.caption(guidance)
     with st.form("account_form", clear_on_submit=True):
         username = st.text_input("아이디", key="auth_username", max_chars=30)
         password = st.text_input("비밀번호", type="password", key="auth_password")
+        input_notice = st.empty()
         confirmation = st.text_input("비밀번호 확인", type="password", key="auth_confirmation") if action == "회원가입" else None
         submitted = st.form_submit_button(action, type="primary", width="stretch")
+    # Render the footer before validation so every error keeps navigation visible.
+    st.button("회원가입" if action == "로그인" else "로그인으로 돌아가기",
+              key="auth_switch", width="stretch", on_click=switch_auth,
+              args=("회원가입" if action == "로그인" else "로그인",))
+    st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다.  \n새로고침 후에는 다시 로그인할 수 있습니다.",
+               text_alignment="center" if action == "로그인" else "left")
     if submitted:
         if not username.strip() or not password:
-            st.error("아이디와 비밀번호를 입력해 주세요.")
+            input_notice.markdown(":red[아이디와 비밀번호를 입력해 주세요.]")
             return
         if action == "회원가입" and password != confirmation:
             st.error("비밀번호 확인이 일치하지 않습니다.")
@@ -468,10 +554,6 @@ def render_auth_form(action):
             st.session_state.ui_db_notice = None
             st.session_state.ui_auth_open = False
             st.rerun()
-    st.button("회원가입" if action == "로그인" else "로그인으로 돌아가기",
-              key="auth_switch", width="stretch", on_click=switch_auth,
-              args=("회원가입" if action == "로그인" else "로그인",))
-    st.caption("로그인은 현재 브라우저 접속 동안 유지됩니다. 새로고침 후에는 다시 로그인할 수 있습니다.")
 
 
 
@@ -510,7 +592,7 @@ def render_sidebar():
             if owner is not None and visible:
                 st.caption("현재 접속의 임시 대화")
             if owner is None and not visible:
-                st.caption("아직 대화가 없어요." if not query else "검색 결과가 없어요.")
+                st.caption("아직 대화가 없어요." if not query else "검색 결과가 없어요.", text_alignment="center")
             period = None
             for key, item in visible:
                 current = history_period(item["updated"])
@@ -536,6 +618,11 @@ def render_welcome():
 
 
 
+def select_example_question(question):
+    # Callbacks run before chat_input is instantiated on the next rerun.
+    st.session_state.chat_input = question
+
+
 def render_welcome_body():
     st.html('''<section class="ui-welcome"><h1>개발 중 막힌 문제를 함께 해결해요.</h1>
     <p>LangChain · LangGraph · MCP의 개발 오류를 함께 살펴봅니다.</p>
@@ -546,9 +633,16 @@ def render_welcome_body():
         with column, st.container(border=True, key=f"example_{index}"):
             st.html(f'<div class="ui-tech">{tech}{icon(name)}</div>')
             st.markdown(f"**{title}**")
-            st.caption(question)
-            if st.button("질문 입력", key=f"example_select_{index}", icon=":material/north_east:", width="stretch"):
-                st.session_state.chat_input = f"{tech}에서 {question} 어떤 부분을 확인해야 하나요?"
+            description = question
+            if tech == "LangGraph":
+                description = question.replace("다음 Node에 ", "다음 Node에  \n")
+            elif tech == "MCP":
+                description = question.replace("클라이언트가 ", "클라이언트가  \n")
+            with st.container(height=48, border=False, key=f"example_description_{index}"):
+                st.caption(description)
+            st.button("질문 입력", key=f"example_select_{index}", icon=":material/north_east:", width="stretch",
+                      on_click=select_example_question,
+                      args=(f"{tech}에서 {question} 어떤 부분을 확인해야 하나요?",))
     st.caption("관련 코드와 개발 환경을 함께 알려주시면 원인을 좁히는 데 도움이 됩니다.", text_alignment="center")
 
 
@@ -559,7 +653,8 @@ def render_message(message, index):
         if message.get("images") and text == DEFAULT_IMAGE_TEXT:
             text = ""
         if text:
-            st.html(f'<div class="ui-user"><pre>{escape(text)}</pre></div>')
+            with st.container(key=f"user_message_{index}"):
+                st.markdown(text)
         if message.get("images"):
             with st.container(horizontal=True, horizontal_alignment="right"):
                 for data in message["images"]:
@@ -576,12 +671,10 @@ def render_message(message, index):
         st.html(f'<div class="ui-assistant"><div class="ui-assistant-icon">{icon("assistant",16)}</div>CodeClue</div>')
         st.markdown(message["content"])
         render_sources(message.get("sources", []))
-        with st.container(horizontal=True):
-            with st.popover("답변 복사", icon=":material/content_copy:"):
-                st.caption("오른쪽 위 복사 버튼으로 전체 답변을 복사하세요.")
-                st.code(message["content"], language=None, wrap_lines=True)
-            st.feedback("thumbs", key=f"feedback_{st.session_state.ui_thread}_{index}")
-        st.caption("도움 됨 / 도움 안 됨 · 피드백은 현재 접속에서만 유지됩니다.")
+        with st.popover("답변 복사", icon=":material/content_copy:"):
+            st.caption("오른쪽 위 복사 버튼으로 전체 답변을 복사하세요.")
+            st.code(message["content"], language=None, wrap_lines=True)
+
 
 
 def render_preview(kind):
@@ -660,11 +753,17 @@ def send_question(prompt, mode, *, prepared=None, images=None):
         images = prepared.get("images")
     user_message = prepared or {"role": "user", "content": environment_question(prompt or DEFAULT_IMAGE_TEXT),
                                 "display_content": prompt or DEFAULT_IMAGE_TEXT, "images": images or []}
+    answer_slot = st.empty()
+    streamed = []
+    def show_token(token):
+        streamed.append(token)
+        answer_slot.markdown("".join(streamed) + "▌")
     with st.spinner("입력을 확인하는 중…" if mode == "연습 모드" else "답변을 작성하고 있어요…", show_time=True):
         result = generate_answer(graph_messages(st.session_state.messages) + [user_message], mode,
                                  user_id=st.session_state.get("user_id"),
                                  conversation_id=st.session_state.get("conversation_id"),
-                                 images=images or None)
+                                 images=images or None, on_token=show_token)
+    answer_slot.empty()
     if result.get("conversation_id") is not None:
         st.session_state.conversation_id = result["conversation_id"]
     persisted = False
@@ -708,7 +807,13 @@ def render_chat():
         if st.session_state.messages else "새 대화")
     st.html(f'<div class="ui-header"><div class="ui-header-title">{icon("panel")}{escape(title)}</div><span>{"UI 예시" if preview else "개발 오류 상담"}</span></div>')
     body = st.empty()
+    value = render_composer(preview)
+    prompt, images, notice = split_composer_value(value)
+    prompt = prompt.strip()
+    submitting = bool(prompt or images) and not preview
     with body.container():
+        if notice:
+            st.warning(notice)
         if preview:
             render_preview(st.session_state.ui_preview)
         else:
@@ -716,12 +821,18 @@ def render_chat():
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
                 st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석을 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다.")
-            if not st.session_state.messages and not st.session_state.ui_failure:
-                render_welcome()
+            # Keep the welcome in its own stable placeholder. Clearing this slot
+            # removes all previous cards before any blocking model work begins.
+            welcome_slot = st.empty()
+            if not st.session_state.messages and not st.session_state.ui_failure and not submitting:
+                with welcome_slot.container():
+                    render_welcome()
+            else:
+                welcome_slot.empty()
             for index, message in enumerate(st.session_state.messages):
                 render_message(message, index)
             failure = st.session_state.ui_failure
-            if failure:
+            if failure and not submitting:
                 if not failure.get("saved_in_history"):
                     render_message(failure["message"], len(st.session_state.messages))
                 result = failure["result"]
@@ -735,23 +846,10 @@ def render_chat():
                     else:
                         st.caption("질문이 DB에 저장됐을 수 있습니다. 중복 저장 방지를 위해 같은 질문의 자동 재시도는 제공하지 않습니다.")
                 st.caption("입력 내용은 위에 유지됩니다. 실패 안내는 AI 답변으로 저장하지 않습니다.")
-    value = render_composer(preview)
-    prompt, images, notice = split_composer_value(value)
-    prompt = prompt.strip()
-    if notice:
-        st.warning(notice)
-    if (prompt or images) and not preview:
-        body.empty()
-        st.html('<style>.st-key-welcome_intro {display:none!important;}</style>')
-        with body.container():
-            for index, message in enumerate(st.session_state.messages):
-                if message["role"] == "user":
-                    render_message(message, index)
-                else:
-                    st.markdown(message["content"])
-            render_message({"role": "user", "content": prompt or DEFAULT_IMAGE_TEXT, "images": images},
-                           len(st.session_state.messages))
-            send_question(prompt, mode, images=images)
+            if submitting:
+                render_message({"role": "user", "content": prompt or DEFAULT_IMAGE_TEXT, "images": images},
+                               len(st.session_state.messages))
+                send_question(prompt, mode, images=images)
 
 
 
