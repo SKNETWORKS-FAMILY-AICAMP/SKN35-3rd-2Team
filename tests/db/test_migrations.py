@@ -56,3 +56,19 @@ def test_downgrade_to_base_removes_everything(engine):
         command.upgrade(cfg, "head")
         command.downgrade(cfg, "base")
         assert [t for t in inspect(conn).get_table_names() if t != "alembic_version"] == []
+
+
+def test_0005_keeps_old_db_images_readable(engine):
+    """0004 구조에서 DB에 바이트로 저장된 이미지가 있어도, 0005로 올리면 그대로 남고 새 칸은 비어 있다."""
+    with engine.begin() as conn:
+        cfg = _cfg(conn)
+        command.upgrade(cfg, "0004")
+        conn.execute(text(
+            "INSERT INTO message_attachments (message_id, position, mime_type, size_bytes, sha256, data, created_at) "
+            "VALUES (1, 0, 'image/png', 3, :sha, :data, '2026-01-01 00:00:00')"
+        ), {"sha": "0" * 64, "data": b"abc"})
+        command.upgrade(cfg, "head")
+        row = conn.execute(text("SELECT data, file_path, thumb_path FROM message_attachments")).one()
+        assert bytes(row.data) == b"abc" and row.file_path is None and row.thumb_path is None
+        columns = {c["name"]: c for c in inspect(conn).get_columns("message_attachments")}
+        assert columns["data"]["nullable"] is True and "file_path" in columns

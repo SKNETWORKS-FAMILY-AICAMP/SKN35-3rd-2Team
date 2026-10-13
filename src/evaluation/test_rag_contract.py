@@ -38,7 +38,7 @@ def test_missing_invalid_and_duplicate_urls_do_not_break_answer():
     assert run_chat([{"role": "user", "content": "質問"}], graph=graph)["sources"] == []
 
 
-@pytest.mark.parametrize("route", ["mcp", "multimodal"])
+@pytest.mark.parametrize("route", ["mcp", "multi_modal"])
 def test_unconnected_routes_stay_unsupported(route):
     graph = Mock()
     graph.invoke.side_effect = KeyError(route)

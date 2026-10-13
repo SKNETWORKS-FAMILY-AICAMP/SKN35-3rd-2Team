@@ -1,4 +1,4 @@
-"""이미지 첨부 연결: 서비스(상태 전달, 저장, 오류 문구)와 입력 값 나누기, 그래프의 multimodal 연결."""
+"""이미지 첨부 연결: 서비스(상태 전달, 저장, 오류 문구)와 입력 값 나누기, 그래프의 multi_modal 연결."""
 import io
 import os
 from contextlib import contextmanager
@@ -15,7 +15,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key-not-real")
 
 from src.app import chat_service  # noqa: E402
 from src.app.chat import DEFAULT_IMAGE_TEXT, split_composer_value  # noqa: E402
-from src.db import create_user, list_messages  # noqa: E402
+from src.db import create_user, list_messages, thumbnail_bytes  # noqa: E402
 from src.db.models import Base  # noqa: E402
 
 
@@ -96,7 +96,7 @@ def test_db_roundtrip_saves_images_and_analysis(local_db, monkeypatch):
     with scope() as session:
         rows = list_messages(session, result["conversation_id"], uid)
         user = rows[0]
-        assert len(user.attachments) == 2 and all(a.thumb_data for a in user.attachments)
+        assert len(user.attachments) == 2 and all(thumbnail_bytes(a) for a in user.attachments)
         assert user.image_analysis == "읽은 글"
     assert len(graph.invoke.call_args.args[0]["image"]) == 2
 

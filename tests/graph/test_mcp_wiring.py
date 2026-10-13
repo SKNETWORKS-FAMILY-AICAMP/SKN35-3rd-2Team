@@ -116,12 +116,12 @@ def test_each_turn_starts_without_old_mcp_results(monkeypatch):
     assert supervisor.seen[-1] == []  # 두 번째 질문의 첫 Supervisor 호출 때 완료 목록이 비어 있다
 
 
-def test_multimodal_route_returns_to_supervisor_and_is_recorded(monkeypatch):
-    """supervisor가 multimodal → rag → answer로 고르면 multimodal 노드를 거쳐 supervisor로 돌아오고 completed_routes에 남는다."""
-    supervisor = FakeSupervisor(["multimodal", "rag", "answer"])
-    monkeypatch.setattr(workflow_module, "multi_modal_agent", lambda: lambda state: {"image_analysis": "읽음", "completed_routes": [*(state.get("completed_routes") or []), "multimodal"]})
+def test_multi_modal_route_returns_to_supervisor_and_is_recorded(monkeypatch):
+    """supervisor가 multi_modal → rag → answer로 고르면 multi_modal 노드를 거쳐 supervisor로 돌아오고 completed_routes에 남는다."""
+    supervisor = FakeSupervisor(["multi_modal", "rag", "answer"])
+    monkeypatch.setattr(workflow_module, "multi_modal_agent", lambda: lambda state: {"image_analysis": "읽음", "completed_routes": [*(state.get("completed_routes") or []), "multi_modal"]})
     graph = build(monkeypatch, supervisor)
     path, result = run(graph)
-    assert path[:5] == ["reset_turn_state", "supervisor", "multimodal", "supervisor", "rag"]
-    assert supervisor.seen[1] == ["multimodal"] and supervisor.seen[2] == ["multimodal", "rag"]
+    assert path[:5] == ["reset_turn_state", "supervisor", "multi_modal", "supervisor", "rag"]
+    assert supervisor.seen[1] == ["multi_modal"] and supervisor.seen[2] == ["multi_modal", "rag"]
     assert result["image_analysis"] == "읽음"

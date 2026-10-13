@@ -407,7 +407,7 @@ def load_saved_conversation(conversation_id):
         with db.db_session() as session:
             rows = db.list_messages(session, conversation_id, owner)
             messages = [{"role": row.role, "content": row.content or "",
-                         "images": [a.thumb_data for a in row.attachments if a.thumb_data],
+                         "images": [b for b in (db.thumbnail_bytes(a) for a in row.attachments) if b],
                          "image_analysis": row.image_analysis,
                          "sources": [{name: getattr(source, name) for name in
                                       ("url", "title", "tech", "version", "doc_type", "snippet", "score", "is_grounded")}

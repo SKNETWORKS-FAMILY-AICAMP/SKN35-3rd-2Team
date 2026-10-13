@@ -42,7 +42,7 @@ with db_session() as s:                      # 화면에 대화 내역을 그릴
 - `record_*` 함수는 **저장하기 전에 입력을 먼저 검사**한다. 실패하면 아무것도 쓰지 않는다. 이 예외는 `db_session` 블록 밖으로 내보낸다(잡지 않는다).
 - 시각은 **UTC**로 저장한다 (TiDB Cloud 서버가 UTC이고 DB의 NOW()를 쓰지 않는다). 한국 시간으로 보여 줄 때는 화면에서 변환한다(변환 함수는 아직 없다).
 - 질문과 답변은 저장 전에 **API 키 같은 비밀을 `[MASKED:...]`로 가린다**(알려진 형태만. 완벽한 보호가 아니다). 이미지는 가릴 수 없다.
-- **이미지는 DB에 원본으로 저장**한다(화면에 다시 보여 주는 용도). LLM에 다시 보내지 않고, 대화 이력에는 이미지에서 읽은 **텍스트**만 붙는다.
+- **이미지는 서버 디스크의 파일로 저장**하고 DB에는 파일 경로만 둔다(`src/db/storage.py`). 저장 폴더는 환경변수 `IMAGE_STORAGE_DIR`(비우면 프로젝트 루트의 `uploads/`)이고, **배포할 때는 서버를 다시 시작해도 지워지지 않는 디스크**로 지정해야 한다. LLM에 다시 보내지 않고, 대화 이력에는 이미지가 아니라 **텍스트**만 붙는다.
 - 한 메시지에 이미지 3장까지, 한 장 2MB까지(기본). 형식은 png/jpeg/webp이고 확장자가 아니라 파일의 실제 바이트로 판별한다.
 - 관리자(`is_admin`)는 가입 화면으로 만들 수 없다. `create_user(..., is_admin=True)`나 시드로만 만든다. **가입 화면에서는 `is_admin`을 사용자 입력으로 받지 말고 항상 False로 고정한다.**
 
@@ -113,7 +113,7 @@ ENV_FILE=.env.tidb uv run alembic -c src/db/alembic.ini upgrade head   # 다른 
 |---|---|
 | `users`, `user_profiles` | 계정(비밀번호는 scrypt 해시만 저장), 기본 개발 환경 |
 | `conversations`, `messages` | 대화, 메시지(`input_type` text/image, `env_snapshot`, `image_analysis`) |
-| `message_attachments` | 사용자 메시지에 딸린 이미지(원본 + 작은 썸네일). 원본은 읽을 때만 불러온다 |
+| `message_attachments` | 사용자 메시지에 딸린 이미지 정보. 원본과 썸네일은 파일이고 `file_path`, `thumb_path`에 경로만 저장 (이전에 DB에 바이트로 저장된 행은 `data`, `thumb_data`로 읽음) |
 | `message_sources` | 답변의 출처(URL, 제목, 버전, 발췌문, 점수, 근거 여부) |
 
 ## 파일
@@ -121,6 +121,8 @@ ENV_FILE=.env.tidb uv run alembic -c src/db/alembic.ini upgrade head   # 다른 
 | 파일 | 역할 |
 |---|---|
 | `turns.py` | `record_user_turn`, `record_assistant_turn` (UI가 쓰는 입구) |
+| `storage.py` | 이미지 파일을 서버 디스크에 쓰고, 읽고, 지움. 저장 폴더 밖의 경로는 거절 |
+| `move_images_to_files.py` | 이전 방식(DB 저장) 이미지를 파일로 옮기는 도구: `uv run python -m src.db.move_images_to_files` |
 | `repository.py` | 가입, 로그인, 계정 관리, 대화, 메시지, 이미지, 출처 함수 |
 | `history.py` | 대화 이력을 턴 수와 토큰 예산 안으로 고르는 로직 (DB와 무관한 순수 함수) |
 | `images.py`, `masking.py`, `limits.py` | 이미지 검증·썸네일·용량 줄이기, 비밀 가리기, 길이 상한 |
