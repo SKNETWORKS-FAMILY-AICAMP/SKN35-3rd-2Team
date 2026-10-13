@@ -51,5 +51,8 @@ SUPERVISOR_SYSTEM_PROMPT = """
                           - rag를 마쳤는데 retrieved_docs가 비어 있고, 질문이 특정 함수·클래스·모듈 이름의 사용법을
                             묻고 있다면, 그 이름이 실제로 있는지 mcp로 확인한 뒤에 answer를 선택한다.
                             (문서에서 확인되지 않은 이름을 아는 것처럼 설명하지 않기 위해서다.)
+                          - multi_modal을 마친 뒤, image_analysis의 [오류 메시지]가 "없음"이고 내용이 LangChain, LangGraph, MCP의
+                            오류나 사용법과 관련이 없으면(예: Git 사용법, 일반 문서, 사진) rag와 mcp를 선택하지 않고 바로 answer를 선택한다.
+                            (검색에 쓸 만한 오류 문구가 없는데 검색하면 관련 없는 문서만 가져와서 답변이 흐려진다.)
                           - 더 수행할 작업이 없다면 반드시 answer를 선택한다.
                           """
