@@ -13,7 +13,7 @@ class RouteDecision(BaseModel):
         "general",
         "rag",
         "mcp",
-        "multimodal",
+        "multi_modal",
         "answer",
     ] = Field(description="현재 상태를 바탕으로 다음에 수행할 작업을 선택합니다.")
 

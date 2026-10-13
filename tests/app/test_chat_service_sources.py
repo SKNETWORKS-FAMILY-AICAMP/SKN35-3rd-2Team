@@ -51,7 +51,7 @@ def test_the_answer_is_still_returned_when_building_sources_fails(monkeypatch):
 
 
 def test_a_graph_that_ends_on_an_unfinished_route_is_still_reported_as_unsupported():
-    """은하님의 기존 안전장치: route가 rag/mcp/multimodal로 끝난 그래프(연결이 안 끝난 경우)는 그대로 "준비 중"으로 안내한다."""
-    for route in ("rag", "mcp", "multimodal"):
+    """은하님의 기존 안전장치: route가 rag/mcp/multi_modal로 끝난 그래프(연결이 안 끝난 경우)는 그대로 "준비 중"으로 안내한다."""
+    for route in ("rag", "mcp", "multi_modal"):
         result = run_chat(HISTORY, graph=fake_graph(route=route, retrieved_docs=[DOC]))
         assert result["status"] == "unsupported" and result["sources"] == []

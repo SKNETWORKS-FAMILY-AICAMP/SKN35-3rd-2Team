@@ -1,4 +1,4 @@
-"""이미지 첨부 연결: 서비스(상태 전달, 저장, 오류 문구)와 입력 값 나누기, 그래프의 multimodal 연결."""
+"""이미지 첨부 연결: 서비스(상태 전달, 저장, 오류 문구)와 입력 값 나누기, 그래프의 multi_modal 연결."""
 import io
 import os
 from contextlib import contextmanager

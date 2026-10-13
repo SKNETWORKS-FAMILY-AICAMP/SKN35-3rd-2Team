@@ -11,7 +11,7 @@
     4) read_images.py      모델에 이미지를 한 번에 보내서 읽기
     5) build_analysis.py   항목이 있는 글로 정리, 비밀값 가리기
 
-- Supervisor가 route="multimodal"을 고르면 실행되고, 끝나면 다시 Supervisor로 돌아간다 (supervisor_prompt 참고).
+- Supervisor가 route="multi_modal"을 고르면 실행되고, 끝나면 다시 Supervisor로 돌아간다 (supervisor_prompt 참고).
 - 이미지는 "원본 바이트"로 받는다. 화면에 다시 보여 주는 용도의 저장은 이 노드가 아니라 그래프 밖(UI의 record_user_turn)이 한다.
   이 노드는 DB를 모른다.
 - 어떤 단계가 실패해도 예외를 던지지 않는다. 실패했다는 안내가 image_analysis에 들어가고 그래프는 계속 진행된다.
@@ -40,9 +40,9 @@ def _question_text(state: dict) -> str:
 
 
 def multi_modal_node(state):
-    # completed_routes에 "multimodal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
+    # completed_routes에 "multi_modal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
     # Supervisor는 이 목록을 보고 이미 끝낸 route를 다시 고르지 않는다.
-    completed = [*(state.get("completed_routes") or []), "multimodal"]
+    completed = [*(state.get("completed_routes") or []), "multi_modal"]
 
     # 1) 이미지 검사: 읽을 수 있는 이미지만 남긴다
     images, notes = validate_images(state.get("image"))

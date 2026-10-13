@@ -156,7 +156,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
 
     Without a DB conversation, temporary UI requests keep their own UUID.
     An injected graph is for tests only; DB calls always construct a fresh graph.
-    images: 첨부 이미지(바이트 목록). 그래프의 State.image로 넘어가고, Supervisor가 multimodal을 골라 읽는다.
+    images: 첨부 이미지(바이트 목록). 그래프의 State.image로 넘어가고, Supervisor가 multi_modal을 골라 읽는다.
     """
     try:
         images = prepare_images(images)
@@ -199,7 +199,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
                     for update in event.values():
                         if isinstance(update, dict):
                             result.update(update)
-        if result.get("route") in ("rag", "mcp", "multimodal"):
+        if result.get("route") in ("rag", "mcp", "multi_modal"):
             return unsupported_result()
         replies = result.get("messages", [])
         if not replies or not isinstance(replies[-1], AIMessage):
@@ -212,7 +212,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
     except Exception as error:
         # dev's conditional edge mapping has no destinations for these routes.
         # Recognize that existing contract failure without changing graph internals.
-        if isinstance(error, KeyError) and error.args in (("mcp",), ("multimodal",)):
+        if isinstance(error, KeyError) and error.args in (("mcp",), ("multi_modal",)):
             return unsupported_result()
         if type(error).__name__ == "GraphRecursionError":
             return chat_result(status="error", code="GRAPH_RECURSION_LIMIT", message=

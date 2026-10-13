@@ -63,7 +63,7 @@ def test_graph_history_and_connected_routes(monkeypatch):
     monkeypatch.setattr(workflow_module, "mcp_node", lambda state: {
         "mcp_results": [], "completed_routes": ["mcp"]})
     monkeypatch.setattr(workflow_module, "multi_modal_agent", lambda: lambda state: {
-        "image_analysis": "test OCR", "completed_routes": ["multimodal"]})
+        "image_analysis": "test OCR", "completed_routes": ["multi_modal"]})
     monkeypatch.setattr(workflow_module, "supervisor_node", lambda state: {
         "route": "answer" if fake.route in (state.get("completed_routes") or []) else fake.route,
         "reason": "test"})
@@ -78,7 +78,7 @@ def test_graph_history_and_connected_routes(monkeypatch):
     assert len(fake.seen[-1]) == 2
     fake.route = "answer"
     assert run_chat(history, graph=graph)["status"] == "success"
-    for route in ("mcp", "multimodal"):
+    for route in ("mcp", "multi_modal"):
         fake.route = route
         assert run_chat(history, graph=graph)["status"] == "success"
 
