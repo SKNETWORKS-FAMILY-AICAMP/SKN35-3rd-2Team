@@ -3,7 +3,7 @@
 
     State.image  -->  [이 노드]  -->  State.image_analysis (문자열 하나)
 
-이 파일에는 전체 흐름만 있고, 각 단계의 일은 같은 폴더의 파일이 한다.
+이 파일에는 전체 흐름만 있고, 각 단계의 일은 src/multi_modal/ 의 파일이 한다 (rag 노드와 src/rag/ 의 관계와 같다).
 
     1) validate_images.py  이미지 검사 (장수, 크기, 형식, 깨짐)
     2) resize_images.py    큰 이미지 줄이기
@@ -15,15 +15,15 @@
 - 이미지는 "원본 바이트"로 받는다. 화면에 다시 보여 주는 용도의 저장은 이 노드가 아니라 그래프 밖(UI의 record_user_turn)이 한다.
   이 노드는 DB를 모른다.
 - 어떤 단계가 실패해도 예외를 던지지 않는다. 실패했다는 안내가 image_analysis에 들어가고 그래프는 계속 진행된다.
-- 설정값은 src/const/multimodal_config.py, 프롬프트는 src/prompt/multimodal_prompt.py에 있다.
+- 설정값은 src/const/multi_modal_config.py, 프롬프트는 src/prompt/multi_modal_prompt.py에 있다.
 """
 
 from src.db.masking import mask_secrets
-from src.graph.node.multimodal.build_analysis import build_analysis
-from src.graph.node.multimodal.encode_images import encode_images
-from src.graph.node.multimodal.read_images import read_images
-from src.graph.node.multimodal.resize_images import resize_images
-from src.graph.node.multimodal.validate_images import validate_images
+from src.multi_modal.build_analysis import build_analysis
+from src.multi_modal.encode_images import encode_images
+from src.multi_modal.read_images import read_images
+from src.multi_modal.resize_images import resize_images
+from src.multi_modal.validate_images import validate_images
 
 
 def _question_text(state: dict) -> str:
@@ -39,7 +39,7 @@ def _question_text(state: dict) -> str:
     return content if isinstance(content, str) else ""
 
 
-def multimodal_node(state):
+def multi_modal_node(state):
     # completed_routes에 "multimodal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
     # Supervisor는 이 목록을 보고 이미 끝낸 route를 다시 고르지 않는다.
     completed = [*(state.get("completed_routes") or []), "multimodal"]

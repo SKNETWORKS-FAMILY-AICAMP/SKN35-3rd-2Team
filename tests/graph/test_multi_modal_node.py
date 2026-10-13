@@ -1,5 +1,5 @@
 """
-이미지 입력 노드(src/graph/node/multimodal) 시험. 실제 모델은 부르지 않고 가짜 모델로 바꿔 끼운다.
+이미지 입력 노드(src/graph/node/multi_modal)와 단계 함수(src/multi_modal) 시험. 실제 모델은 부르지 않고 가짜 모델로 바꿔 끼운다.
 실행: uv run pytest tests/graph -q
 """
 
@@ -9,13 +9,13 @@ import pytest
 from PIL import Image
 
 from src.const import db_config as limits
-from src.const import multimodal_config as cfg
-from src.graph.node.multimodal import read_images as read_images_module
-from src.graph.node.multimodal.build_analysis import build_analysis
-from src.graph.node.multimodal.encode_images import encode_images
-from src.graph.node.multimodal.multimodal_node import multimodal_node
-from src.graph.node.multimodal.resize_images import resize_images
-from src.graph.node.multimodal.validate_images import ImageItem, sniff_mime, validate_images
+from src.const import multi_modal_config as cfg
+from src.multi_modal import read_images as read_images_module
+from src.multi_modal.build_analysis import build_analysis
+from src.multi_modal.encode_images import encode_images
+from src.graph.node.multi_modal.multi_modal_node import multi_modal_node
+from src.multi_modal.resize_images import resize_images
+from src.multi_modal.validate_images import ImageItem, sniff_mime, validate_images
 
 
 def make_image(fmt="PNG", size=(120, 80), color=(200, 30, 30)) -> bytes:
@@ -190,7 +190,7 @@ def test_build_prepends_notes_and_clips():
 # ---------------------------------------------------------------- 노드 전체
 def test_node_full_pipeline_with_fake_model(fake_model):
     state = {"original_question": "이 오류 어떻게 해결해?", "image": [make_image(), make_image("JPEG")]}
-    result = multimodal_node(state)
+    result = multi_modal_node(state)
     assert set(result) == {"image_analysis", "completed_routes"} and result["completed_routes"] == ["multimodal"]
     assert "ModuleNotFoundError" in result["image_analysis"]
 
@@ -204,29 +204,29 @@ def test_node_full_pipeline_with_fake_model(fake_model):
 
 
 def test_node_uses_last_message_when_no_original_question(fake_model):
-    multimodal_node({"image": make_image(), "messages": [{"role": "user", "content": "마지막 질문"}]})
+    multi_modal_node({"image": make_image(), "messages": [{"role": "user", "content": "마지막 질문"}]})
     assert "마지막 질문" in fake_model.calls[0][0][1]["content"][0]["text"]
 
 
 def test_node_image_only_question(fake_model):
-    multimodal_node({"image": make_image()})
+    multi_modal_node({"image": make_image()})
     assert "이미지만 올림" in fake_model.calls[0][0][1]["content"][0]["text"]
 
 
 def test_node_no_image_does_not_call_model(fake_model):
-    assert multimodal_node({"original_question": "q"}) == {"image_analysis": cfg.NO_IMAGE_NOTICE, "completed_routes": ["multimodal"]}
+    assert multi_modal_node({"original_question": "q"}) == {"image_analysis": cfg.NO_IMAGE_NOTICE, "completed_routes": ["multimodal"]}
     assert fake_model.calls == []
 
 
 def test_node_all_images_invalid_does_not_call_model(fake_model):
-    result = multimodal_node({"image": [b"junk", b""]})
+    result = multi_modal_node({"image": [b"junk", b""]})
     assert "건너뛰었습니다" in result["image_analysis"] and fake_model.calls == []
 
 
 def test_node_model_failure_is_reported_not_raised(monkeypatch):
     model = FakeModel(error=RuntimeError("boom api_key=sk-" + "Z" * 30))
     monkeypatch.setattr(read_images_module, "create_openai_model", lambda **kwargs: model)
-    result = multimodal_node({"image": make_image()})["image_analysis"]
+    result = multi_modal_node({"image": make_image()})["image_analysis"]
     assert "이미지 분석에 실패했습니다" in result and "RuntimeError" in result
     assert "Z" * 30 not in result  # 오류 문구에 섞인 키도 가린다
 
@@ -236,12 +236,12 @@ def test_node_missing_key_is_reported_not_raised(monkeypatch):
         raise ValueError("OPENAI_API_KEY 설정이 필요합니다.")
 
     monkeypatch.setattr(read_images_module, "create_openai_model", no_key)
-    assert "설정이 필요합니다" in multimodal_node({"image": make_image()})["image_analysis"]
+    assert "설정이 필요합니다" in multi_modal_node({"image": make_image()})["image_analysis"]
 
 
 def test_node_notes_about_skipped_and_resized(fake_model):
     big = make_image(size=(cfg.RESIZE_MAX_EDGE + 500, 400))
-    result = multimodal_node({"image": [b"junk", big]})["image_analysis"]
+    result = multi_modal_node({"image": [b"junk", big]})["image_analysis"]
     assert result.startswith("※ 이미지 1은(는) 읽을 수 없어")
     assert "이미지 2은(는) 크기가 커서" in result
     sent = fake_model.calls[0][0][1]["content"]
@@ -250,9 +250,9 @@ def test_node_notes_about_skipped_and_resized(fake_model):
 
 # ---------------------------------------------------------------- completed_routes (Supervisor가 끝난 route를 알게 한다)
 def test_node_adds_multimodal_to_the_completed_routes_in_every_case(fake_model, monkeypatch):
-    ok = multimodal_node({"original_question": "q", "image": make_image(), "completed_routes": ["rag"]})
+    ok = multi_modal_node({"original_question": "q", "image": make_image(), "completed_routes": ["rag"]})
     assert ok["completed_routes"] == ["rag", "multimodal"]  # 앞선 route는 그대로 둔다
-    assert multimodal_node({"original_question": "q"})["completed_routes"] == ["multimodal"]  # 이미지가 없을 때
-    assert multimodal_node({"original_question": "q", "image": [b"junk"]})["completed_routes"] == ["multimodal"]  # 모두 건너뛴 경우
+    assert multi_modal_node({"original_question": "q"})["completed_routes"] == ["multimodal"]  # 이미지가 없을 때
+    assert multi_modal_node({"original_question": "q", "image": [b"junk"]})["completed_routes"] == ["multimodal"]  # 모두 건너뛴 경우
     monkeypatch.setattr(read_images_module, "create_openai_model", lambda **kwargs: FakeModel(error=RuntimeError("boom")))
-    assert multimodal_node({"original_question": "q", "image": make_image()})["completed_routes"] == ["multimodal"]  # 모델 호출이 실패한 경우
+    assert multi_modal_node({"original_question": "q", "image": make_image()})["completed_routes"] == ["multimodal"]  # 모델 호출이 실패한 경우
