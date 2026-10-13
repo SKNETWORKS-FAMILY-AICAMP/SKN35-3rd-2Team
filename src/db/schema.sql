@@ -1,7 +1,7 @@
 -- ============================================================
 -- CodeClue 데이터베이스 생성 스크립트 (MySQL 8.x / TiDB Cloud)
 --
--- 기준: 로컬 MySQL 8.4에서 alembic 마이그레이션 0001~0004를 적용한 실제 테이블 (SHOW CREATE TABLE 결과)
+-- 기준: 로컬 MySQL 8.4에서 alembic 마이그레이션 0001~0005를 적용한 실제 테이블 (SHOW CREATE TABLE 결과)
 -- 테이블 6개: users, user_profiles, conversations, messages, message_attachments, message_sources
 --
 -- 사용법
@@ -10,6 +10,21 @@
 --   2) 한 번만 실행한다 (이미 있으면 건너뛰도록 IF NOT EXISTS를 썼다).
 --   3) 계정은 이 파일에 없다. 관리자 계정은 .env의 SEED_ADMIN_* 를 채운 뒤
 --      uv run python -m src.db.seed  로 만든다 (비밀번호 해시는 SQL로 직접 넣지 않는다).
+--
+-- 이미지 저장 방식 (중요)
+--   첨부 이미지의 원본과 썸네일은 DB가 아니라 서버(앱이 실행되는 PC)의 폴더에 파일로 저장한다.
+--   DB(message_attachments)에는 그 파일의 상대 경로(file_path, thumb_path)만 저장한다.
+--   - 저장 폴더: .env의 IMAGE_STORAGE_DIR. 비워 두면 프로젝트 루트의 uploads/ (git에는 올라가지 않는다).
+--   - 이미지 파일은 저장한 PC에만 있다. DB를 여럿이 공유해도 파일은 공유되지 않아서,
+--     다른 PC에서는 글은 보이고 이미지(썸네일)만 안 보인다 (화면이 깨지지는 않는다).
+--     그래서 발표처럼 한 PC에서 시연할 때는 그 PC에서 올린 이미지가 그대로 보인다.
+--   - 실제 서비스로 운영한다면 서버를 다시 시작해도 지워지지 않는 디스크로 IMAGE_STORAGE_DIR을 지정해야 한다.
+--   - data, thumb_data 칸은 예전 방식(DB에 바이트로 저장)의 이미지를 읽기 위해 남겨 둔 것이라 새 이미지는 NULL이다.
+--     예전 이미지를 파일로 옮기려면: uv run python -m src.db.move_images_to_files
+--
+-- 이미 만들어 둔 DB(0004 구조)를 쓰고 있다면 이 파일을 다시 실행하지 말고 구조만 올린다:
+--   uv run alembic -c src/db/alembic.ini upgrade head
+--   (이 명령을 실행하지 않으면 이미지가 있는 질문이 DB 오류로 실패한다. 팀원도 최신 코드를 받은 뒤 한 번 실행해야 한다.)
 --
 -- 이 파일 대신 alembic으로 만들 수도 있다 (같은 결과):
 --   uv run alembic -c src/db/alembic.ini upgrade head
@@ -73,7 +88,9 @@ CREATE TABLE IF NOT EXISTS `messages` (
   CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. 첨부 이미지 (메시지당 최대 3장은 코드가 제한한다. 원본과 썸네일을 함께 저장)
+-- 5. 첨부 이미지 (메시지당 최대 3장은 코드가 제한한다)
+--    원본과 썸네일은 서버 디스크의 파일이고 file_path, thumb_path에 경로만 저장한다 (저장 폴더: .env의 IMAGE_STORAGE_DIR).
+--    data, thumb_data는 이전 방식(DB 저장)의 이미지를 읽기 위한 칸이라 새 이미지는 NULL이다.
 CREATE TABLE IF NOT EXISTS `message_attachments` (
   `id` int NOT NULL AUTO_INCREMENT,
   `message_id` int NOT NULL,
@@ -83,7 +100,9 @@ CREATE TABLE IF NOT EXISTS `message_attachments` (
   `width` int DEFAULT NULL,
   `height` int DEFAULT NULL,
   `sha256` varchar(64) NOT NULL,
-  `data` mediumblob NOT NULL,
+  `file_path` varchar(255) DEFAULT NULL,
+  `thumb_path` varchar(255) DEFAULT NULL,
+  `data` mediumblob,
   `thumb_data` mediumblob,
   `analysis_text` mediumtext,
   `created_at` datetime NOT NULL,
@@ -119,4 +138,4 @@ CREATE TABLE IF NOT EXISTS `message_sources` (
 --   `version_num` varchar(32) NOT NULL,
 --   PRIMARY KEY (`version_num`)
 -- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
--- INSERT INTO `alembic_version` (`version_num`) VALUES ('0004');
+-- INSERT INTO `alembic_version` (`version_num`) VALUES ('0005');

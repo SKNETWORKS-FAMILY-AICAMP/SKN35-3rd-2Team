@@ -25,6 +25,7 @@ from .images import (
     sha256_hex,
     validate_image,
 )
+from . import storage
 from .masking import mask_secrets
 from .models import (
     Conversation,
@@ -191,7 +192,14 @@ def delete_conversation(session: Session, conversation_id: int, user_id: int) ->
     conv = get_conversation(session, conversation_id, user_id)
     if conv is None:
         return False
+    rows = session.execute(
+        select(MessageAttachment.file_path, MessageAttachment.thumb_path)
+        .join(Message, Message.id == MessageAttachment.message_id)
+        .where(Message.conversation_id == conv.id)
+    ).all()
     session.delete(conv)
+    session.flush()
+    storage.remove_files(*(path for row in rows for path in row))  # DB에서 지운 뒤에 이미지 파일도 지운다
     return True
 
 
@@ -339,21 +347,56 @@ def add_image(
         select(func.max(MessageAttachment.position)).where(MessageAttachment.message_id == msg.id)
     )
 
-    att = MessageAttachment(
-        message_id=msg.id,
-        position=0 if last_pos is None else last_pos + 1,
-        mime_type=mime,
-        size_bytes=len(data),
-        width=width,
-        height=height,
-        sha256=sha256_hex(data),
-        data=data,
-        thumb_data=make_thumbnail(data),
-        analysis_text=clip_analysis(mask_secrets(analysis_text)) if analysis_text else analysis_text,
-    )
-    session.add(att)
-    session.flush()
+    position = 0 if last_pos is None else last_pos + 1
+    digest = sha256_hex(data)
+    original_path, thumb_path = storage.relative_paths(msg.id, position, digest, mime)
+    thumb = make_thumbnail(data)
+    written: list[str] = []
+    try:
+        # 원본과 썸네일은 서버 디스크에 파일로 두고, DB에는 경로만 저장한다 (storage.py).
+        storage.write_file(original_path, data)
+        written.append(original_path)
+        if thumb:
+            storage.write_file(thumb_path, thumb)
+            written.append(thumb_path)
+        att = MessageAttachment(
+            message_id=msg.id,
+            position=position,
+            mime_type=mime,
+            size_bytes=len(data),
+            width=width,
+            height=height,
+            sha256=digest,
+            file_path=original_path,
+            thumb_path=thumb_path if thumb else None,
+            analysis_text=clip_analysis(mask_secrets(analysis_text)) if analysis_text else analysis_text,
+        )
+        session.add(att)
+        session.flush()
+    except BaseException:
+        storage.remove_files(*written)  # DB에 못 넣었으면 방금 쓴 파일도 지운다
+        raise
     return att
+
+
+def image_bytes(att: MessageAttachment) -> bytes | None:
+    """이미지 원본 바이트. 파일로 저장된 이미지는 파일에서, 이전 방식으로 DB에 저장된 이미지는 DB에서 읽는다.
+
+    파일 경로가 있는데 파일이 없으면 FileNotFoundError (저장 폴더가 지워졌거나 다른 서버일 때).
+    """
+    if att.file_path:
+        return storage.read_file(att.file_path)
+    return att.data
+
+
+def thumbnail_bytes(att: MessageAttachment) -> bytes | None:
+    """화면에 보여 줄 썸네일 바이트. 파일이 없거나 읽을 수 없으면 None (화면이 멈추지 않게 예외를 내지 않는다)."""
+    if att.thumb_path:
+        try:
+            return storage.read_file(att.thumb_path)
+        except (OSError, ValueError):
+            return None
+    return att.thumb_data
 
 
 def set_message_image_analysis(session: Session, message_id: int, user_id: int, text: str) -> None:
@@ -370,7 +413,7 @@ def set_message_image_analysis(session: Session, message_id: int, user_id: int, 
 
 
 def list_images(session: Session, message_id: int, user_id: int) -> list[MessageAttachment]:
-    """메시지의 이미지 목록 (메타데이터와 썸네일). 원본(data)은 접근할 때 따로 읽힌다."""
+    """메시지의 이미지 목록 (메타데이터와 파일 경로). 이미지 바이트는 image_bytes, thumbnail_bytes로 읽는다."""
     msg = get_message(session, message_id, user_id)
     if msg is None:
         raise PermissionError("메시지가 없거나 이 사용자의 메시지가 아닙니다.")
@@ -378,11 +421,12 @@ def list_images(session: Session, message_id: int, user_id: int) -> list[Message
 
 
 def get_image(session: Session, attachment_id: int, user_id: int) -> MessageAttachment | None:
-    """이미지 한 장 (원본 바이트 포함). 없거나 남의 것이면 None."""
+    """이미지 한 장의 정보. 없거나 남의 것이면 None. 원본 바이트는 image_bytes(att)로 읽는다."""
     att = session.get(MessageAttachment, attachment_id)
     if att is None or get_message(session, att.message_id, user_id) is None:
         return None
-    _ = att.data  # 원본 바이트를 지금 읽어 둔다
+    if not att.file_path:
+        _ = att.data  # 이전 방식(DB 저장)의 이미지는 원본 바이트를 지금 읽어 둔다
     return att
 
 
@@ -398,7 +442,10 @@ def delete_image(session: Session, attachment_id: int, user_id: int) -> bool:
     att = session.get(MessageAttachment, attachment_id)
     if att is None or get_message(session, att.message_id, user_id) is None:
         return False
+    paths = (att.file_path, att.thumb_path)
     session.delete(att)
+    session.flush()
+    storage.remove_files(*paths)  # DB에서 지운 뒤에 파일을 지운다
     return True
 
 

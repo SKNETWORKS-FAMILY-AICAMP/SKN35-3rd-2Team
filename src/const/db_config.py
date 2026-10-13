@@ -46,6 +46,7 @@ IMAGE_MAX_PIXELS = 40_000_000               # 가로x세로가 이보다 크면 
 IMAGE_THUMB_EDGE = 256                      # 썸네일의 긴 변(픽셀)
 IMAGE_ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 IMAGE_ANALYSIS_MAX_CHARS = 100_000          # 이미지에서 읽은 텍스트의 최대 글자 수 (넘으면 잘라서 저장)
+IMAGE_STORAGE_DIR_NAME = "uploads"          # 이미지 파일을 두는 기본 폴더 (프로젝트 루트 아래). IMAGE_STORAGE_DIR 환경변수로 바꾼다 (src/db/storage.py)
 
 # ---------------------------------------------------------------------------
 # 텍스트 길이 (src/db/limits.py)

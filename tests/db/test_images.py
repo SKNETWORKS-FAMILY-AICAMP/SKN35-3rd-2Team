@@ -18,6 +18,7 @@ from src.db import (  # noqa: E402
     delete_conversation,
     delete_image,
     get_image,
+    image_bytes,
     init_db,
     list_images,
     list_messages,
@@ -26,6 +27,7 @@ from src.db import (  # noqa: E402
     session_scope,
     set_image_analysis,
     shrink_image,
+    thumbnail_bytes,
 )
 from src.db.images import inspect_image, make_thumbnail, sha256_hex, sniff_mime  # noqa: E402
 from src.db.models import MessageAttachment  # noqa: E402
@@ -89,9 +91,11 @@ def test_add_image_stores_metadata_thumbnail_and_hash(session, turn):
     assert att.mime_type == "image/png" and att.size_bytes == len(data)
     assert (att.width, att.height) == (1200, 800)
     assert att.sha256 == sha256_hex(data) and att.position == 0
-    assert att.thumb_data and sniff_mime(att.thumb_data) == "image/jpeg"
-    assert len(att.thumb_data) < len(data) or len(att.thumb_data) < 30_000
-    thumb = Image.open(io.BytesIO(att.thumb_data))
+    assert att.file_path and att.thumb_path and att.data is None and att.thumb_data is None  # 파일에 두고 DB에는 경로만
+    thumb_bytes = thumbnail_bytes(att)
+    assert thumb_bytes and sniff_mime(thumb_bytes) == "image/jpeg"
+    assert len(thumb_bytes) < len(data) or len(thumb_bytes) < 30_000
+    thumb = Image.open(io.BytesIO(thumb_bytes))
     assert max(thumb.size) <= 256
     assert NV not in att.analysis_text and "[MASKED" in att.analysis_text  # 분석 텍스트는 마스킹
 
@@ -174,9 +178,9 @@ def test_get_image_returns_original_bytes_but_list_does_not_load_them(session, t
 
     listed = list_images(session, msg.id, user.id)[0]
     assert "data" in inspect(listed).unloaded          # 목록에서는 원본을 읽지 않았다
-    assert listed.thumb_data                           # 미리보기는 바로 쓸 수 있다
+    assert thumbnail_bytes(listed)                     # 미리보기는 바로 쓸 수 있다
     full = get_image(session, att.id, user.id)
-    assert full.data == data                           # 필요할 때 원본을 그대로 돌려준다
+    assert image_bytes(full) == data                   # 필요할 때 원본을 그대로 돌려준다
 
 
 def test_very_long_analysis_text_is_clipped_not_rejected(session, turn):
