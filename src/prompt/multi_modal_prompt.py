@@ -1,8 +1,8 @@
-from src.const.multimodal_config import EMPTY_SECTION_TEXT, SECTION_HEADINGS
+from src.const.multi_modal_config import EMPTY_SECTION_TEXT, SECTION_HEADINGS
 
 _HEADINGS = "\n".join(f"{heading}\n(내용)" for heading in SECTION_HEADINGS)
 
-MULTIMODAL_SYSTEM_PROMPT = f"""
+MULTI_MODAL_SYSTEM_PROMPT = f"""
 너는 개발자가 올린 이미지(스크린샷, 사진)를 읽어서 글로 옮기는 담당이다.
 이미지에는 코드, 터미널 출력, 오류 화면, 설정 화면 등이 있다.
 

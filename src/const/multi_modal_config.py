@@ -1,7 +1,7 @@
 """
 이미지 입력(멀티모달) 노드의 설정값.
 
-- 이 노드(src/graph/node/multimodal)만 쓰는 값을 한곳에 모았다. config.py, models.py는 건드리지 않는다.
+- 이 노드(src/graph/node/multi_modal)와 단계 함수(src/multi_modal)만 쓰는 값을 한곳에 모았다. config.py, models.py는 건드리지 않는다.
 - 모두 코드 상수다 (.env로 바꾸지 않는다). 값을 바꾸려면 이 파일을 고친다.
 - 이미지 장수, 크기, 형식의 한도는 DB와 같은 값을 써야 하므로 여기에 두지 않고 src/const/db_config.py를 읽는다.
 - 채팅 모델과 키는 src/const/models.py의 create_openai_model()이 정한 팀 공통 모델을 쓴다
