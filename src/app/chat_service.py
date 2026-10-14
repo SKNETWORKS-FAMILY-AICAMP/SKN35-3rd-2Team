@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
+from src.graph.progress import StageReporter
 
 
 def text_content(content):
@@ -153,7 +154,7 @@ def result_sources(result):
         return []
 
 
-def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_token=None):
+def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_token=None, on_stage=None):
     """Send full bounded history to a fresh graph, using the DB conversation ID.
 
     Without a DB conversation, temporary UI requests keep their own UUID.
@@ -181,11 +182,15 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
     }
     config = {"configurable": {"thread_id": str(conversation_id) if conversation_id is not None else str(uuid4())}}
     try:
+        reporter = StageReporter(on_stage)
+        if graph is None:
+            reporter.loading_if_first_run()
         engine = graph if graph is not None else get_graph()
-        if on_token is None:
+        if on_token is None and on_stage is None:
             result = engine.invoke(state, config=config)
         else:
             result = dict(state)
+            reporter.start()
             for kind, event in engine.stream(state, config=config, stream_mode=["messages", "updates"]):
                 if kind == "messages":
                     chunk, metadata = event
@@ -195,12 +200,13 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
                             block.get("text", "") for block in content
                             if isinstance(block, dict) and block.get("type") in ("text", "output_text")
                         )
-                        if token:
+                        if token and on_token is not None:
                             on_token(token)
                 elif kind == "updates":
-                    for update in event.values():
+                    for node_name, update in event.items():
                         if isinstance(update, dict):
                             result.update(update)
+                        reporter.node_finished(node_name, update)
         if result.get("route") in ("rag", "mcp", "multi_modal"):
             return unsupported_result()
         replies = result.get("messages", [])
@@ -231,7 +237,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
         ))
 
 
-def run_db_chat(question, *, user_id, conversation_id=None, images=None, on_token=None):
+def run_db_chat(question, *, user_id, conversation_id=None, images=None, on_token=None, on_stage=None):
     """Save the question, fetch bounded DB history once, run a fresh graph, save reply.
 
     user_id must come from authenticated session state, never from a chat input.
@@ -257,7 +263,7 @@ def run_db_chat(question, *, user_id, conversation_id=None, images=None, on_toke
         if images and history and history[-1]["role"] == "user" and not history[-1]["content"].strip():
             history[-1] = {**history[-1], "content": IMAGE_ONLY_QUESTION}  # 이미지만 올린 질문
         # history already includes the current question; do not append it again.
-        result = run_chat(history, conversation_id=current_id, images=images, on_token=on_token)
+        result = run_chat(history, conversation_id=current_id, images=images, on_token=on_token, on_stage=on_stage)
         result["conversation_id"] = current_id
         if result["status"] == "success":
             with db_session() as session:
