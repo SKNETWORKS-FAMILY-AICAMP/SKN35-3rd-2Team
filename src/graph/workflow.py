@@ -1,4 +1,3 @@
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from src.agent.answer_agent import answer_agent
@@ -63,8 +62,6 @@ def workflow():
     builder.add_edge("general", END)
     builder.add_edge("answer", END)
 
-    memory = InMemorySaver()
-
-    graph = builder.compile(checkpointer=memory)
+    graph = builder.compile()
 
     return graph
