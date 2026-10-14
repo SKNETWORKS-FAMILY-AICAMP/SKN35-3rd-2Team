@@ -12,7 +12,7 @@ env/
 # Environment Variables
 .env
 .env.*
-!.env.example
+.env.example
 
 # IDE / Editor
 .vscode/
@@ -67,3 +67,8 @@ data/raw
 
 # 사용자가 올린 이미지 파일 (src/db/storage.py)
 uploads/
+
+문서/대용량 파일
+*.pdf
+*.docx
+
