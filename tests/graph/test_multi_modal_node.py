@@ -153,7 +153,7 @@ def test_build_orders_sections_and_fills_empty():
     positions = [text.index(h) for h in cfg.SECTION_HEADINGS]
     assert positions == sorted(positions)  # 항상 정해진 순서
     assert "TypeError: x" in text
-    assert text.count(cfg.EMPTY_SECTION_TEXT) == 3  # 코드, 환경 정보, 읽기 불확실
+    assert text.count(cfg.EMPTY_SECTION_TEXT) == 4  # 코드, 환경 정보, 화면 속 글자, 읽기 불확실
 
 
 def test_build_keeps_code_indentation_and_markdown_headings():
@@ -281,3 +281,22 @@ def test_attached_content_is_clipped(fake_model, monkeypatch):
 def test_question_is_left_alone_when_nothing_was_read(fake_model):
     assert "original_question" not in multi_modal_node({"original_question": "q"})  # 이미지 없음
     assert "original_question" not in multi_modal_node({"original_question": "q", "image": [b"junk"]})  # 읽을 이미지 없음
+
+
+# ---------------------------------------------------------------- 구조도·표처럼 오류가 없는 이미지
+def test_screen_text_section_is_kept_between_environment_and_uncertain():
+    assert cfg.SECTION_HEADINGS.index("[화면 속 글자]") == cfg.SECTION_HEADINGS.index("[환경 정보]") + 1
+    assert cfg.SECTION_HEADINGS[-1] == "[읽기 불확실]"
+
+
+def test_diagram_text_without_errors_or_code_is_not_lost():
+    raw = "[화면 설명]\n흐름도\n[화면 속 글자]\nSupervisor\n질의 분석 · 동적 라우팅\nMCP 도구 실행"
+    text = build_analysis(raw, [])
+    assert "Supervisor" in text and "MCP 도구 실행" in text
+    assert text.index("[화면 속 글자]") < text.index("[읽기 불확실]")
+
+
+def test_prompt_asks_for_diagram_structure_and_all_visible_text():
+    from src.prompt.multi_modal_prompt import MULTI_MODAL_SYSTEM_PROMPT as prompt
+
+    assert "[화면 속 글자]" in prompt and "구조도" in prompt and "화살표" in prompt
