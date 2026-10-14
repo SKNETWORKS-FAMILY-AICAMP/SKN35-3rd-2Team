@@ -98,7 +98,7 @@ STYLE = """
 [data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:300px;}
 [data-testid="stBottomBlockContainer"] {margin-inline:auto;}
 .st-key-composer [data-testid="stChatInput"] .e1p9v2yr2 {
- justify-content:flex-end;}
+ justify-content:flex-start;}
 .ui-sidebar-description {white-space:nowrap;font-size:12px;line-height:1.5;letter-spacing:-0.3px;color:var(--ui-muted);}
 /* Keep account controls visible; only the conversation list scrolls. */
 [data-testid="stSidebarContent"] {overflow:hidden!important;}
@@ -207,7 +207,8 @@ STYLE = """
 [data-testid="stCode"] > div:last-child:has(button) {
  opacity:1!important;visibility:visible!important;pointer-events:auto!important;
  transition:none!important;top:0!important;right:0!important;padding:8px 12px!important;}
-[class*="st-key-user_message_"] {background:var(--ui-panel);border-radius:16px;padding:12px 20px;margin-left:auto;max-width:90%;}
+[class*="st-key-user_message_"] {background:var(--ui-panel);border-radius:16px;padding:12px 20px;margin-left:auto;
+ width:fit-content!important;max-width:90%;box-sizing:border-box;}
 </style>
 """
 
@@ -475,6 +476,7 @@ def render_authentication():
 
 def close_auth_dialog():
     st.session_state.ui_auth_open = False
+    st.session_state.pop("auth_missing_fields", None)
 
 
 @st.dialog("로그인", width="small", on_dismiss=close_auth_dialog)
@@ -489,9 +491,17 @@ def render_signup_dialog():
 
 def switch_auth(action):
     st.session_state.auth_action = action
+    st.session_state.pop("auth_missing_fields", None)
     for key in ("auth_username", "auth_password", "auth_confirmation"):
         st.session_state.pop(key, None)
     st.rerun(scope="app")
+
+
+def validate_auth_fields():
+    st.session_state.auth_missing_fields = {
+        "auth_username": not st.session_state.get("auth_username", "").strip(),
+        "auth_password": not st.session_state.get("auth_password", ""),
+    }
 
 
 def render_auth_form(action):
@@ -501,12 +511,25 @@ def render_auth_form(action):
     guidance_slot = st.empty()
     if action == "회원가입":
         guidance_slot.caption(guidance)
-    with st.form("account_form", clear_on_submit=True):
-        username = st.text_input("아이디", key="auth_username", max_chars=30)
-        password = st.text_input("비밀번호", type="password", key="auth_password")
-        input_notice = st.empty()
+    missing = st.session_state.get("auth_missing_fields", {})
+    error_placeholders = {
+        "auth_username": "아이디를 입력하세요.",
+        "auth_password": "비밀번호를 입력하세요.",
+    }
+    selectors = ",".join(
+        f".st-key-{key} input::placeholder"
+        for key in error_placeholders if missing.get(key)
+    )
+    if selectors:
+        st.html(f"<style>{selectors} {{color:#dc2626!important;opacity:1!important;}}</style>")
+    with st.form("account_form", clear_on_submit=False):
+        username = st.text_input("아이디", key="auth_username", max_chars=30,
+                                 placeholder=error_placeholders["auth_username"] if missing.get("auth_username") else None)
+        password = st.text_input("비밀번호", type="password", key="auth_password",
+                                 placeholder=error_placeholders["auth_password"] if missing.get("auth_password") else None)
         confirmation = st.text_input("비밀번호 확인", type="password", key="auth_confirmation") if action == "회원가입" else None
-        submitted = st.form_submit_button(action, type="primary", width="stretch")
+        submitted = st.form_submit_button(action, type="primary", width="stretch",
+                                           on_click=validate_auth_fields)
     # Render the footer before validation so every error keeps navigation visible.
     st.button("회원가입" if action == "로그인" else "로그인으로 돌아가기",
               key="auth_switch", width="stretch", on_click=switch_auth,
@@ -515,7 +538,6 @@ def render_auth_form(action):
                text_alignment="center" if action == "로그인" else "left")
     if submitted:
         if not username.strip() or not password:
-            input_notice.markdown(":red[아이디와 비밀번호를 입력해 주세요.]")
             return
         if action == "회원가입" and password != confirmation:
             st.error("비밀번호 확인이 일치하지 않습니다.")
@@ -660,7 +682,7 @@ def render_message(message, index):
         if message.get("images") and text == DEFAULT_IMAGE_TEXT:
             text = ""
         if text:
-            with st.container(key=f"user_message_{index}"):
+            with st.container(key=f"user_message_{index}", width="content"):
                 st.markdown(text)
         if message.get("images"):
             with st.container(horizontal=True, horizontal_alignment="right"):
