@@ -10,7 +10,8 @@ from src import db
 from src.app.browser_auth import forget_login, remember_login, restore_login
 
 from src.const.config import OPEN_MODEL
-from src.app.chat_service import chat_result, run_chat, run_db_chat, text_content
+from src.app.chat_service import (IMAGE_ONLY_QUESTION, LEGACY_IMAGE_ONLY_QUESTION, chat_result, run_chat, run_db_chat,
+                                   text_content)
 from src.prompt.chat_prompt import CHAT_SYSTEM_PROMPT
 
 
@@ -293,7 +294,7 @@ def get_model():
 
 IMAGE_TYPES = ["png", "jpg", "jpeg", "webp"]
 MAX_UPLOAD_MB = 10  # 올릴 때 한도. 2MB를 넘는 이미지는 서비스에서 자동으로 줄인다.
-DEFAULT_IMAGE_TEXT = "첨부한 이미지를 확인하고 문제의 원인과 해결 방법을 알려 주세요."
+DEFAULT_IMAGE_TEXT = IMAGE_ONLY_QUESTION
 
 
 def split_composer_value(value, *, limit=3):
@@ -657,7 +658,7 @@ def render_welcome_body():
 def render_message(message, index):
     if message["role"] == "user":
         text = message.get("display_content", message["content"])
-        if message.get("images") and text == DEFAULT_IMAGE_TEXT:
+        if message.get("images") and text in (DEFAULT_IMAGE_TEXT, LEGACY_IMAGE_ONLY_QUESTION):
             text = ""
         if text:
             with st.container(key=f"user_message_{index}"):

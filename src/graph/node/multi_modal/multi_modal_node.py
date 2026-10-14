@@ -18,6 +18,7 @@
 - 설정값은 src/const/multi_modal_config.py, 프롬프트는 src/prompt/multi_modal_prompt.py에 있다.
 """
 
+from src.const import multi_modal_config as cfg
 from src.db.masking import mask_secrets
 from src.multi_modal.build_analysis import build_analysis
 from src.multi_modal.encode_images import encode_images
@@ -37,6 +38,18 @@ def _question_text(state: dict) -> str:
     last = messages[-1]
     content = last.get("content") if isinstance(last, dict) else getattr(last, "content", "")
     return content if isinstance(content, str) else ""
+
+
+def _question_with_image(state: dict, analysis: str) -> str:
+    """질문 글 뒤에 이미지에서 읽은 내용을 붙인다. 이후 RAG(검색어)와 MCP(도구 선택)가 이 글을 질문으로 쓴다.
+
+    이미지만 올려서 질문이 "이미지를 확인해 주세요"뿐이어도, 읽은 오류 문구로 검색할 수 있게 하려는 것이다.
+    """
+    question = _question_text(state)
+    if cfg.IMAGE_CONTEXT_MARKER in question:
+        return question
+    text = analysis if len(analysis) <= cfg.QUESTION_IMAGE_MAX_CHARS else analysis[: cfg.QUESTION_IMAGE_MAX_CHARS] + cfg.QUESTION_CLIP_SUFFIX
+    return question + "\n\n" + cfg.IMAGE_CONTEXT_MARKER + "\n" + text
 
 
 def multi_modal_node(state):
@@ -63,5 +76,10 @@ def multi_modal_node(state):
         notes.append(f"이미지 분석에 실패했습니다: {type(exc).__name__}: {mask_secrets(str(exc))[:300]}")
         return {"image_analysis": build_analysis(None, notes), "completed_routes": completed}
 
-    # 5) 항목이 있는 글로 정리
-    return {"image_analysis": build_analysis(raw_text, notes), "completed_routes": completed}
+    # 5) 항목이 있는 글로 정리하고, 읽은 내용을 질문에 붙인다 (읽기에 성공한 경우에만)
+    analysis = build_analysis(raw_text, notes)
+    return {
+        "image_analysis": analysis,
+        "original_question": _question_with_image(state, analysis),
+        "completed_routes": completed,
+    }
