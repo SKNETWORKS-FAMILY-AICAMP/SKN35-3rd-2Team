@@ -90,7 +90,9 @@ def document_sources(documents, mcp_results=None):
 
 
 # 이미지만 올리고 질문을 쓰지 않았을 때 그래프에 넘기는 질문
-IMAGE_ONLY_QUESTION = "첨부한 이미지를 확인하고 문제의 원인과 해결 방법을 알려 주세요."
+# "문제의 원인과 해결 방법"처럼 문제가 있다고 단정하는 문장은 쓰지 않는다. 새 이미지에 문제가 없을 때 모델이 이전 대화의 오류를 다시 설명하기 때문이다.
+IMAGE_ONLY_QUESTION = "첨부한 이미지의 내용을 확인해 주세요. 오류나 문제가 보이면 원인과 해결 방법을 알려 주세요."
+LEGACY_IMAGE_ONLY_QUESTION = "첨부한 이미지를 확인하고 문제의 원인과 해결 방법을 알려 주세요."  # 예전에 저장된 대화에 남아 있는 문장 (화면에서 같은 방식으로 보여 주려고 남겨 둔다)
 
 
 def prepare_images(images):
@@ -156,7 +158,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
 
     Without a DB conversation, temporary UI requests keep their own UUID.
     An injected graph is for tests only; DB calls always construct a fresh graph.
-    images: 첨부 이미지(바이트 목록). 그래프의 State.image로 넘어가고, Supervisor가 multimodal을 골라 읽는다.
+    images: 첨부 이미지(바이트 목록). 그래프의 State.image로 넘어가고, Supervisor가 multi_modal을 골라 읽는다.
     """
     try:
         images = prepare_images(images)
@@ -199,7 +201,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
                     for update in event.values():
                         if isinstance(update, dict):
                             result.update(update)
-        if result.get("route") in ("rag", "mcp", "multimodal"):
+        if result.get("route") in ("rag", "mcp", "multi_modal"):
             return unsupported_result()
         replies = result.get("messages", [])
         if not replies or not isinstance(replies[-1], AIMessage):
@@ -212,7 +214,7 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
     except Exception as error:
         # dev's conditional edge mapping has no destinations for these routes.
         # Recognize that existing contract failure without changing graph internals.
-        if isinstance(error, KeyError) and error.args in (("mcp",), ("multimodal",)):
+        if isinstance(error, KeyError) and error.args in (("mcp",), ("multi_modal",)):
             return unsupported_result()
         if type(error).__name__ == "GraphRecursionError":
             return chat_result(status="error", code="GRAPH_RECURSION_LIMIT", message=

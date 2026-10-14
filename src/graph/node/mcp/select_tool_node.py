@@ -13,7 +13,7 @@ State.mcp_tools + 질문  -->  [이 노드]  -->  State.mcp_call ({"display_name
 
 from src.const import mcp_config as cfg
 from src.const.models import create_openai_model
-from src.const.multi_modal_config import NO_IMAGE_NOTICE
+from src.const.multi_modal_config import IMAGE_CONTEXT_MARKER, NO_IMAGE_NOTICE
 from src.mcp_integration.client.tools import describe_error
 from src.prompt.mcp_prompt import MCP_RETRY_NOTICE, MCP_SELECT_SYSTEM_PROMPT
 
@@ -43,6 +43,8 @@ def _image_text(state) -> str:
     text = (state.get("image_analysis") or "").strip()
     if not text or text == NO_IMAGE_NOTICE:
         return ""
+    if IMAGE_CONTEXT_MARKER in (state.get("original_question") or ""):
+        return ""  # 멀티모달 노드가 이미 질문에 붙여 두었다 (같은 글을 두 번 보여 주지 않는다)
     return text if len(text) <= cfg.IMAGE_CONTEXT_MAX_CHARS else text[: cfg.IMAGE_CONTEXT_MAX_CHARS] + cfg.CLIP_SUFFIX
 
 

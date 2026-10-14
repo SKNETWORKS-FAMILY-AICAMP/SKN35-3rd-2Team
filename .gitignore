@@ -64,3 +64,6 @@ transformers_cache/
 
 
 data/raw
+
+# 사용자가 올린 이미지 파일 (src/db/storage.py)
+uploads/

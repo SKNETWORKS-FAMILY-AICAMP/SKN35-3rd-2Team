@@ -484,3 +484,14 @@ def test_mcp_node_adds_mcp_to_the_completed_routes_even_when_it_fails(env, monke
     env([])
     monkeypatch.setattr(agent_module, "list_tools_node", lambda state: (_ for _ in ()).throw(RuntimeError("boom")))
     assert mcp_node(parent_state(completed_routes=["rag"]))["completed_routes"] == ["rag", "mcp"]
+
+
+def test_image_text_is_not_shown_twice_when_already_attached_to_the_question(env):
+    """멀티모달 노드가 읽은 내용을 질문에 붙여 두었으면, 도구 선택 때 같은 글을 다시 붙이지 않는다."""
+    from src.const.multi_modal_config import IMAGE_CONTEXT_MARKER
+
+    model, _ = env([pick(text="hi", times=3)], [OK])
+    run("이 오류 해결해줘\n\n" + IMAGE_CONTEXT_MARKER + "\n" + IMAGE_TEXT, image_analysis=IMAGE_TEXT)
+    prompt = user_prompt(model)
+    assert "GraphRecursionError" in prompt          # 질문에 붙어 있는 읽은 내용은 그대로 보인다
+    assert "이미지에서 읽은 내용:" not in prompt     # 별도 항목으로 한 번 더 붙지는 않는다

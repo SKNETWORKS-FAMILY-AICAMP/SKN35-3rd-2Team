@@ -24,6 +24,7 @@ from .repository import (
     get_history_context,
     get_image,
     get_message,
+    image_bytes,
     get_sources,
     list_conversations,
     list_images,
@@ -34,12 +35,13 @@ from .repository import (
     set_source_grounded,
     set_summary,
     set_user_active,
+    thumbnail_bytes,
     update_profile,
 )
 
 __all__ = [
     "Base", "User", "UserProfile", "Conversation", "Message", "MessageSource", "MessageAttachment",
-    "add_image", "list_images", "get_image", "set_image_analysis", "delete_image", "list_messages",
+    "add_image", "list_images", "get_image", "image_bytes", "thumbnail_bytes", "set_image_analysis", "delete_image", "list_messages",
     "shrink_image", "set_message_image_analysis",
     "record_user_turn", "record_assistant_turn", "UserTurn", "AssistantTurn",
     "make_engine", "init_db", "make_session_factory", "session_scope",

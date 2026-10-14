@@ -11,13 +11,14 @@
     4) read_images.py      모델에 이미지를 한 번에 보내서 읽기
     5) build_analysis.py   항목이 있는 글로 정리, 비밀값 가리기
 
-- Supervisor가 route="multimodal"을 고르면 실행되고, 끝나면 다시 Supervisor로 돌아간다 (supervisor_prompt 참고).
+- Supervisor가 route="multi_modal"을 고르면 실행되고, 끝나면 다시 Supervisor로 돌아간다 (supervisor_prompt 참고).
 - 이미지는 "원본 바이트"로 받는다. 화면에 다시 보여 주는 용도의 저장은 이 노드가 아니라 그래프 밖(UI의 record_user_turn)이 한다.
   이 노드는 DB를 모른다.
 - 어떤 단계가 실패해도 예외를 던지지 않는다. 실패했다는 안내가 image_analysis에 들어가고 그래프는 계속 진행된다.
 - 설정값은 src/const/multi_modal_config.py, 프롬프트는 src/prompt/multi_modal_prompt.py에 있다.
 """
 
+from src.const import multi_modal_config as cfg
 from src.db.masking import mask_secrets
 from src.multi_modal.build_analysis import build_analysis
 from src.multi_modal.encode_images import encode_images
@@ -39,10 +40,22 @@ def _question_text(state: dict) -> str:
     return content if isinstance(content, str) else ""
 
 
+def _question_with_image(state: dict, analysis: str) -> str:
+    """질문 글 뒤에 이미지에서 읽은 내용을 붙인다. 이후 RAG(검색어)와 MCP(도구 선택)가 이 글을 질문으로 쓴다.
+
+    이미지만 올려서 질문이 "이미지를 확인해 주세요"뿐이어도, 읽은 오류 문구로 검색할 수 있게 하려는 것이다.
+    """
+    question = _question_text(state)
+    if cfg.IMAGE_CONTEXT_MARKER in question:
+        return question
+    text = analysis if len(analysis) <= cfg.QUESTION_IMAGE_MAX_CHARS else analysis[: cfg.QUESTION_IMAGE_MAX_CHARS] + cfg.QUESTION_CLIP_SUFFIX
+    return question + "\n\n" + cfg.IMAGE_CONTEXT_MARKER + "\n" + text
+
+
 def multi_modal_node(state):
-    # completed_routes에 "multimodal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
+    # completed_routes에 "multi_modal"을 더해 돌려준다 (rag_node, mcp_node와 같다).
     # Supervisor는 이 목록을 보고 이미 끝낸 route를 다시 고르지 않는다.
-    completed = [*(state.get("completed_routes") or []), "multimodal"]
+    completed = [*(state.get("completed_routes") or []), "multi_modal"]
 
     # 1) 이미지 검사: 읽을 수 있는 이미지만 남긴다
     images, notes = validate_images(state.get("image"))
@@ -63,5 +76,10 @@ def multi_modal_node(state):
         notes.append(f"이미지 분석에 실패했습니다: {type(exc).__name__}: {mask_secrets(str(exc))[:300]}")
         return {"image_analysis": build_analysis(None, notes), "completed_routes": completed}
 
-    # 5) 항목이 있는 글로 정리
-    return {"image_analysis": build_analysis(raw_text, notes), "completed_routes": completed}
+    # 5) 항목이 있는 글로 정리하고, 읽은 내용을 질문에 붙인다 (읽기에 성공한 경우에만)
+    analysis = build_analysis(raw_text, notes)
+    return {
+        "image_analysis": analysis,
+        "original_question": _question_with_image(state, analysis),
+        "completed_routes": completed,
+    }

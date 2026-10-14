@@ -132,10 +132,13 @@ class Message(Base):
 class MessageAttachment(Base):
     """사용자 메시지에 딸린 이미지 (화면에 다시 보여 주기 위한 원본 보관용).
 
-    - 이미지에서 읽어 낸 텍스트는 메시지 본문(content)에 들어가고, 여기에는 원본 바이트를 둔다.
+    - 이미지 원본과 썸네일은 DB가 아니라 서버 디스크의 파일이다. 여기에는 그 파일의 상대 경로만 둔다
+      (file_path = 원본, thumb_path = 썸네일, 저장 폴더는 src/db/storage.py).
+    - data, thumb_data(DB에 직접 둔 바이트)는 이전 방식으로 저장된 행을 읽기 위해 남겨 둔 것이다. 새 행은 NULL이다.
+      읽을 때는 파일 경로가 있으면 파일, 없으면 이 칸을 쓴다 (repository.image_bytes, thumbnail_bytes).
+    - 이미지에서 읽어 낸 텍스트는 메시지 본문(content)에 들어간다.
     - LLM에 넘기는 대화 이력에는 이미지가 아니라 텍스트(analysis_text/content)만 쓴다.
-    - data(원본)는 deferred라서, 첨부 목록을 읽을 때는 가져오지 않고 data에 접근할 때 따로 읽는다.
-    - thumb_data(작은 미리보기)는 대화 목록 화면에서 쓴다.
+    - data는 deferred라서, 첨부 목록을 읽을 때는 가져오지 않는다.
     """
 
     __tablename__ = "message_attachments"
@@ -150,8 +153,10 @@ class MessageAttachment(Base):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sha256: Mapped[str] = mapped_column(String(64))
-    data: Mapped[bytes] = mapped_column(LargeBlob, deferred=True)
-    thumb_data: Mapped[bytes | None] = mapped_column(LargeBlob, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 원본 파일의 상대 경로 (storage.py)
+    thumb_path: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 썸네일 파일의 상대 경로
+    data: Mapped[bytes | None] = mapped_column(LargeBlob, nullable=True, deferred=True)  # 이전 방식(DB 저장)의 원본
+    thumb_data: Mapped[bytes | None] = mapped_column(LargeBlob, nullable=True)  # 이전 방식(DB 저장)의 썸네일
     analysis_text: Mapped[str | None] = mapped_column(LongText, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
