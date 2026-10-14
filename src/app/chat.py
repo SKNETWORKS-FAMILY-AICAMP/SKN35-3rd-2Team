@@ -837,8 +837,10 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
                                  conversation_id=st.session_state.get("conversation_id"),
                                  images=images or None, on_token=show_token,
                                  on_stage=lambda label: progress.update(label=label))
-        progress.update(label="답변 완성" if result["status"] == "success" else "답변을 완료하지 못했어요",
-                        state="complete" if result["status"] == "success" else "error")
+        if result["status"] == "success":
+            progress.update(label="답변 완성", state="complete")
+    if result["status"] != "success":
+        progress.empty()
     if result["status"] == "success":
         answer_slot.markdown(result["answer"])
     else:
@@ -955,10 +957,9 @@ def render_chat():
                 if not failure.get("saved_in_history"):
                     render_message(failure["message"], len(st.session_state.messages))
                 result = failure["result"]
-                if result["status"] == "unsupported":
-                    st.info(result["error"]["message"])
-                else:
-                    st.error(result["error"]["message"])
+                failure_index = len(st.session_state.messages) + (0 if failure.get("saved_in_history") else 1)
+                render_message({"role": "assistant", "content": result["error"]["message"], "sources": []}, failure_index)
+                if result["status"] != "unsupported":
                     if owner is None or mode != "OpenAI AI 답변":
                         if st.button("재시도", key="retry", icon=":material/refresh:"):
                             send_question("", mode, prepared=failure["message"])
