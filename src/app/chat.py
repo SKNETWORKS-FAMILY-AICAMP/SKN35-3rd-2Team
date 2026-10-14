@@ -257,7 +257,7 @@ UPLOAD_TOOLTIP = r"""
   };
   document.addEventListener("click", window.codeclueBrandHandler);
   // Streamlit exposes no upload-tooltip parameter. Update only its native tooltip.
-  const label = "Upload or drag files (PNG, JPG, WEBP). Up to 3 images.";
+  const label = "Upload images or code files (PNG, JPG, WEBP, PY, MD, TXT, LOG, IPYNB). Up to 3 images and 3 text files.";
   const update = () => {
     document.querySelectorAll('[data-testid="stCode"]').forEach(block => {
       const code = block.querySelector('code');
@@ -342,7 +342,7 @@ def default_question(images, has_documents):
     return FILE_ONLY_QUESTION if has_documents else DEFAULT_IMAGE_TEXT
 
 
-def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None, on_token=None):
+def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None, on_token=None, on_stage=None):
     if images and mode != "OpenAI AI 답변":
         return chat_result(status="error", code="IMAGE_UNSUPPORTED",
                            message="이미지 분석은 'OpenAI AI 답변' 모드에서만 사용할 수 있어요.")
@@ -354,8 +354,8 @@ def generate_answer(messages, mode, *, user_id=None, conversation_id=None, image
     if mode == "OpenAI AI 답변":
         if user_id is not None:
             return run_db_chat(messages[-1]["content"], user_id=user_id, conversation_id=conversation_id,
-                               images=images, on_token=on_token)
-        return run_chat(messages, images=images, on_token=on_token)
+                               images=images, on_token=on_token, on_stage=on_stage)
+        return run_chat(messages, images=images, on_token=on_token, on_stage=on_stage)
     if mode != "NVIDIA AI 답변":
         return chat_result(status="error", code="INVALID_MODE", message="답변 모드를 확인해 주세요.")
     try:
@@ -825,16 +825,20 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     question = prompt or default_question(images, bool(context))
     user_message = prepared or {"role": "user", "content": environment_question(question) + context,
                                 "display_content": question, "images": images or []}
+    progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
     answer_slot = st.empty()
     streamed = []
     def show_token(token):
         streamed.append(token)
         answer_slot.markdown("".join(streamed) + "▌")
-    with st.spinner("입력을 확인하는 중…" if mode == "연습 모드" else "답변을 작성하고 있어요…", show_time=True):
+    with progress:
         result = generate_answer(graph_messages(st.session_state.messages) + [user_message], mode,
                                  user_id=st.session_state.get("user_id"),
                                  conversation_id=st.session_state.get("conversation_id"),
-                                 images=images or None, on_token=show_token)
+                                 images=images or None, on_token=show_token,
+                                 on_stage=lambda label: progress.update(label=label))
+        progress.update(label="답변 완성" if result["status"] == "success" else "답변을 완료하지 못했어요",
+                        state="complete" if result["status"] == "success" else "error")
     answer_slot.empty()
     if result.get("conversation_id") is not None:
         st.session_state.conversation_id = result["conversation_id"]
