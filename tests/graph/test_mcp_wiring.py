@@ -61,11 +61,13 @@ def initial(question="langgraph 최신 버전 알려줘"):
 
 
 def run(graph, thread="t"):
-    path = []
-    result = None
+    # 그래프에 checkpointer가 없어서(workflow에서 InMemorySaver를 뺐다) get_state를 쓸 수 없다. 노드가 돌려준 갱신을 차례로 모아 최종 상태를 만든다.
+    path, result = [], dict(initial())
     for chunk in graph.stream(initial(), config={"configurable": {"thread_id": thread}}, stream_mode="updates"):
-        path.extend(chunk)
-    result = graph.get_state({"configurable": {"thread_id": thread}}).values
+        for node, update in chunk.items():
+            path.append(node)
+            if isinstance(update, dict):
+                result.update(update)
     return path, result
 
 

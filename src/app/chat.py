@@ -12,6 +12,8 @@ from src.app.browser_auth import forget_login, remember_login, restore_login
 from src.const.config import OPEN_MODEL
 from src.app.chat_service import (IMAGE_ONLY_QUESTION, LEGACY_IMAGE_ONLY_QUESTION, chat_result, run_chat, run_db_chat,
                                    text_content)
+from src.app.attachments import (ATTACHMENT_ONLY_QUESTION, FILE_ONLY_QUESTION, IMAGE_EXTENSIONS, TEXT_EXTENSIONS,
+                                 build_context, is_image_file, is_text_file, split_attachment_blocks)
 from src.prompt.chat_prompt import CHAT_SYSTEM_PROMPT
 
 
@@ -317,12 +319,27 @@ def split_composer_value(value, *, limit=3):
     files = getattr(value, "files", None)
     if text is None and isinstance(value, dict):
         text, files = value.get("text"), value.get("files")
-    images = [file.getvalue() for file in (files or [])]
+    images = [file.getvalue() for file in (files or []) if is_image_file(getattr(file, "name", None))]
     notice = None
     if len(images) > limit:
         images = images[:limit]
         notice = f"이미지는 한 번에 {limit}장까지 보낼 수 있어서 앞의 {limit}장만 사용했어요."
     return text or "", images, notice
+
+
+def composer_documents(value):
+    """chat_input 값에서 글 파일(.py, .md, .ipynb 등)을 [(이름, 바이트)]로 꺼낸다. 이미지는 split_composer_value가 맡는다."""
+    files = getattr(value, "files", None)
+    if files is None and isinstance(value, dict):
+        files = value.get("files")
+    return [(file.name, file.getvalue()) for file in (files or []) if is_text_file(getattr(file, "name", None))]
+
+
+def default_question(images, has_documents):
+    """글 없이 파일만 올렸을 때 대신 넣는 질문 (문제가 있다고 단정하지 않는 문장)."""
+    if images and has_documents:
+        return ATTACHMENT_ONLY_QUESTION
+    return FILE_ONLY_QUESTION if has_documents else DEFAULT_IMAGE_TEXT
 
 
 def generate_answer(messages, mode, *, user_id=None, conversation_id=None, images=None, on_token=None):
@@ -693,7 +710,11 @@ def render_message(message, index):
     if message["role"] == "user":
         st.html(f'<div id="user-turn-{index}" style="scroll-margin-top:24px"></div>')
         text = message.get("display_content", message["content"])
-        if message.get("images") and text in (DEFAULT_IMAGE_TEXT, LEGACY_IMAGE_ONLY_QUESTION):
+        clean_content, attached_files = split_attachment_blocks(message["content"])
+        if "display_content" not in message:
+            text = clean_content  # 저장된 대화에서 불러온 질문: 파일 내용은 뺀다
+        if (message.get("images") or attached_files) and text in (
+                DEFAULT_IMAGE_TEXT, LEGACY_IMAGE_ONLY_QUESTION, FILE_ONLY_QUESTION, ATTACHMENT_ONLY_QUESTION):
             text = ""
         if message.get("images"):
             with st.container(key=f"user_images_row_{index}", horizontal=True,
@@ -708,6 +729,9 @@ def render_message(message, index):
                               horizontal_alignment="right", width="stretch"):
                 with st.container(key=f"user_message_{index}", width="content"):
                     st.markdown(text)
+        for file_name, file_body in attached_files:
+            with st.expander(f"첨부 파일 · {file_name}", icon=":material/description:"):
+                st.code(file_body, language=None, wrap_lines=True)
         if message.get("image_analysis"):
             with st.expander("이미지에서 읽은 내용", icon=":material/image_search:"):
                 st.text(message["image_analysis"])
@@ -775,7 +799,7 @@ def render_composer(preview):
             with st.container(key="composer_box"):
                 prompt = st.chat_input("에러 메시지와 관련 코드를 입력해 주세요.", key="chat_input",
                                        submit_mode="disable", height="content", disabled=preview,
-                                       accept_file="multiple", file_type=IMAGE_TYPES, max_upload_size=MAX_UPLOAD_MB)
+                                       accept_file="multiple", file_type=[*IMAGE_EXTENSIONS, *TEXT_EXTENSIONS], max_upload_size=MAX_UPLOAD_MB)
             st.caption("API 키·비밀번호는 입력하지 마세요.", text_alignment="center")
     return prompt
 
@@ -794,11 +818,13 @@ def graph_messages(messages):
             if m["role"] == "user" and m.get("image_analysis") else m for m in messages]
 
 
-def send_question(prompt, mode, *, prepared=None, images=None):
+def send_question(prompt, mode, *, prepared=None, images=None, context=""):
+    """context: 입력창에 올린 글 파일을 질문 뒤에 붙일 글로 바꾼 것 (attachments.build_context). 화면에는 질문만 보이고 파일은 접는 영역으로 보인다."""
     if prepared is not None:
         images = prepared.get("images")
-    user_message = prepared or {"role": "user", "content": environment_question(prompt or DEFAULT_IMAGE_TEXT),
-                                "display_content": prompt or DEFAULT_IMAGE_TEXT, "images": images or []}
+    question = prompt or default_question(images, bool(context))
+    user_message = prepared or {"role": "user", "content": environment_question(question) + context,
+                                "display_content": question, "images": images or []}
     answer_slot = st.empty()
     streamed = []
     def show_token(token):
@@ -893,17 +919,19 @@ def render_chat():
     value = render_composer(preview)
     prompt, images, notice = split_composer_value(value)
     prompt = prompt.strip()
-    submitting = bool(prompt or images) and not preview
+    context, document_notices = build_context(composer_documents(value))
+    submitting = bool(prompt or images or context) and not preview
     with body.container():
-        if notice:
-            st.warning(notice)
+        for message in [notice, *document_notices]:
+            if message:
+                st.warning(message)
         if preview:
             render_preview(st.session_state.ui_preview)
         else:
             if mode == "연습 모드":
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
             else:
-                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석을 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다.")
+                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석, 글 파일(py, md, ipynb 등) 읽기를 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다.")
             # Keep the welcome in its own stable placeholder. Clearing this slot
             # removes all previous cards before any blocking model work begins.
             welcome_slot = st.empty()
@@ -931,9 +959,9 @@ def render_chat():
                         st.caption("질문이 DB에 저장됐을 수 있습니다. 중복 저장 방지를 위해 같은 질문의 자동 재시도는 제공하지 않습니다.")
                 st.caption("입력 내용은 위에 유지됩니다. 실패 안내는 AI 답변으로 저장하지 않습니다.")
             if submitting:
-                render_message({"role": "user", "content": prompt or DEFAULT_IMAGE_TEXT, "images": images},
-                               len(st.session_state.messages))
-                send_question(prompt, mode, images=images)
+                render_message({"role": "user", "content": (prompt or default_question(images, bool(context))) + context,
+                                "images": images}, len(st.session_state.messages))
+                send_question(prompt, mode, images=images, context=context)
 
 
 

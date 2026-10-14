@@ -35,6 +35,15 @@ def image_summary(state):
     return {"has_image": count > 0, "image_count": count}
 
 
+QUESTION_MAX_CHARS = 3_000  # 첨부 파일이 붙은 긴 질문이 Supervisor 판단마다 통째로 들어가지 않게 한다 (답변 단계는 전체를 본다)
+
+
+def _clip(content):
+    if isinstance(content, str) and len(content) > QUESTION_MAX_CHARS:
+        return content[:QUESTION_MAX_CHARS] + " …(이하 생략)"
+    return content
+
+
 def supervisor_node(state):
     print("supervisor 진입", end="\n\n")
     supervisor = model.with_structured_output(RouteDecision)
@@ -49,7 +58,7 @@ def supervisor_node(state):
                 "role": "user",
                 "content": str(
                     {
-                        "messages": state["messages"][-1].content,
+                        "messages": _clip(state["messages"][-1].content),
                         "image": image_summary(state),
                         "image_analysis": state.get("image_analysis"),
                         "retrieved_docs": state.get("retrieved_docs"),
