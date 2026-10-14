@@ -839,7 +839,10 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
                                  on_stage=lambda label: progress.update(label=label))
         progress.update(label="답변 완성" if result["status"] == "success" else "답변을 완료하지 못했어요",
                         state="complete" if result["status"] == "success" else "error")
-    answer_slot.empty()
+    if result["status"] == "success":
+        answer_slot.markdown(result["answer"])
+    else:
+        answer_slot.empty()
     if result.get("conversation_id") is not None:
         st.session_state.conversation_id = result["conversation_id"]
     persisted = False
