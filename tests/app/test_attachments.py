@@ -134,3 +134,19 @@ def test_default_question_depends_on_what_was_attached():
     assert default_question([], True) == at.FILE_ONLY_QUESTION
     assert default_question([b"i"], True) == at.ATTACHMENT_ONLY_QUESTION
     assert "문제가 있다" not in at.FILE_ONLY_QUESTION  # 문제가 있다고 단정하지 않는다
+
+
+def test_큰_노트북도_글만_뽑아_사용한다():
+    import json
+    notebook = {"nbformat": 4, "cells": [
+        {"cell_type": "code", "source": "print(1)", "outputs": [{"output_type": "display_data", "data": {"image/png": "A" * 400_000}}]}]}
+    raw = json.dumps(notebook).encode()
+    assert len(raw) > at.MAX_FILE_BYTES
+    text, _ = at.read_document("a.ipynb", raw)
+    assert "print(1)" in text and "AAAA" not in text
+
+
+def test_노트북이_아닌_파일은_300KB_한도를_유지한다():
+    import pytest
+    with pytest.raises(ValueError):
+        at.read_document("a.py", b"x" * (at.MAX_FILE_BYTES + 1))

@@ -27,6 +27,7 @@ TEXT_EXTENSIONS = ("py", "md", "txt", "log", "json", "yaml", "yml", "toml", "ini
 
 MAX_DOCUMENTS = 3
 MAX_FILE_BYTES = 300_000
+MAX_NOTEBOOK_BYTES = 5_000_000  # 노트북은 그림(base64)이 파일 크기의 대부분이라 따로 넉넉하게 둔다. 글만 뽑은 뒤에는 MAX_FILE_CHARS가 적용된다
 MAX_FILE_CHARS = 10_000
 MAX_OUTPUT_CHARS = 2_000  # 노트북의 출력 한 건 (오류 메시지는 대부분 이 안에 들어온다)
 
@@ -125,8 +126,9 @@ def notebook_to_text(raw):
 
 def read_document(name, data):
     """파일 하나를 (글, 안내)로 바꾼다. 읽을 수 없으면 ValueError (사용자에게 그대로 보여 줄 수 있는 문장)."""
-    if len(data) > MAX_FILE_BYTES:
-        raise ValueError(f"{MAX_FILE_BYTES // 1000}KB를 넘어서 사용하지 않았어요.")
+    limit = MAX_NOTEBOOK_BYTES if extension(name) == "ipynb" else MAX_FILE_BYTES
+    if len(data) > limit:
+        raise ValueError(f"{limit // 1000}KB를 넘어서 사용하지 않았어요.")
     text = decode_text(data)
     if extension(name) == "ipynb":
         text = notebook_to_text(text)
