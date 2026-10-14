@@ -42,3 +42,16 @@ class MCPState(MessagesState):
     mcp_failures: NotRequired[list[dict]]
     mcp_error: NotRequired[dict | None]
     mcp_outcome: NotRequired[dict | None]
+
+
+class MultiModalState(MessagesState):
+    original_question: str
+    image: NotRequired[Any]
+
+    images: NotRequired[list]  # 검사를 통과한 이미지 (ImageItem 목록)
+    notes: NotRequired[list[str]]  # 건너뛰었거나 줄였다는 안내
+    parts: NotRequired[list[dict]]  # 모델에 보낼 형태(base64)로 바꾼 이미지
+    raw_text: NotRequired[str | None]  # 모델이 읽은 글. 읽지 못했으면 None
+
+    image_analysis: NotRequired[str]
+    question_with_image: NotRequired[str | None]  # 읽은 내용을 붙인 질문 (읽기에 성공한 경우에만)

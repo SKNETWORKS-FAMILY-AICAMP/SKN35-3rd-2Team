@@ -13,7 +13,7 @@ from src.const import multi_modal_config as cfg
 from src.multi_modal import read_images as read_images_module
 from src.multi_modal.build_analysis import build_analysis
 from src.multi_modal.encode_images import encode_images
-from src.graph.node.multi_modal.multi_modal_node import multi_modal_node
+from src.agent.multi_modal_agent import multi_modal_node
 from src.multi_modal.resize_images import resize_images
 from src.multi_modal.validate_images import ImageItem, sniff_mime, validate_images
 
@@ -300,3 +300,41 @@ def test_prompt_asks_for_diagram_structure_and_all_visible_text():
     from src.prompt.multi_modal_prompt import MULTI_MODAL_SYSTEM_PROMPT as prompt
 
     assert "[화면 속 글자]" in prompt and "구조도" in prompt and "화살표" in prompt
+
+
+# ---------------------------------------------------------------- 하위 그래프 (단계마다 노드)
+def _visited(state):
+    from src.agent.multi_modal_agent import multi_modal_agent
+
+    order = []
+    for event in multi_modal_agent().stream(state, stream_mode="updates"):
+        order.extend(event)
+    return order
+
+
+def test_graph_visits_all_five_nodes_in_order(fake_model):
+    assert _visited({"original_question": "q", "image": [make_image()]}) == [
+        "validate_images", "resize_images", "encode_images", "read_images", "build_analysis"]
+
+
+def test_graph_skips_to_build_analysis_when_no_readable_image(fake_model):
+    assert _visited({"original_question": "q", "image": [b"junk"]}) == ["validate_images", "build_analysis"]
+    assert fake_model.calls == []
+
+
+def test_graph_goes_straight_to_build_analysis_when_encoding_fails(fake_model, monkeypatch):
+    from src.graph.node.multi_modal import encode_images_node as module
+
+    def boom(images):
+        raise RuntimeError("encode boom")
+
+    monkeypatch.setattr(module, "encode_images", boom)
+    assert _visited({"original_question": "q", "image": [make_image()]}) == [
+        "validate_images", "resize_images", "encode_images", "build_analysis"]
+    assert fake_model.calls == []
+    assert "이미지 분석에 실패했습니다" in multi_modal_node({"original_question": "q", "image": [make_image()]})["image_analysis"]
+
+
+def test_main_state_does_not_receive_image_bytes_or_base64(fake_model):
+    result = multi_modal_node({"original_question": "q", "image": [make_image()]})
+    assert set(result) == {"image_analysis", "original_question", "completed_routes"}
