@@ -62,7 +62,7 @@ def test_graph_history_and_connected_routes(monkeypatch):
     # Newly connected tool/image routes must stay offline in this contract test.
     monkeypatch.setattr(workflow_module, "mcp_node", lambda state: {
         "mcp_results": [], "completed_routes": ["mcp"]})
-    monkeypatch.setattr(workflow_module, "multi_modal_agent", lambda: lambda state: {
+    monkeypatch.setattr(workflow_module, "multi_modal_node", lambda state: {
         "image_analysis": "test OCR", "completed_routes": ["multi_modal"]})
     monkeypatch.setattr(workflow_module, "supervisor_node", lambda state: {
         "route": "answer" if fake.route in (state.get("completed_routes") or []) else fake.route,

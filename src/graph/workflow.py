@@ -3,7 +3,7 @@ from langgraph.graph import END, START, StateGraph
 from src.agent.answer_agent import answer_agent
 from src.agent.general_agent import general_agent
 from src.agent.mcp_agent import mcp_node
-from src.agent.multi_modal_agent import multi_modal_agent
+from src.agent.multi_modal_agent import multi_modal_node
 from src.agent.rag_agent import rag_node
 from src.graph.node.supervisor_node import supervisor_node
 from src.graph.state import State
@@ -38,7 +38,7 @@ def workflow():
     builder.add_node("answer", answer_agent())
     builder.add_node("rag", rag_node)
     builder.add_node("mcp", mcp_node)
-    builder.add_node("multi_modal", multi_modal_agent())
+    builder.add_node("multi_modal", multi_modal_node)
 
     builder.add_edge(START, "reset_turn_state")
     builder.add_edge("reset_turn_state", "supervisor")
