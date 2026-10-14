@@ -136,7 +136,7 @@ def test_default_question_depends_on_what_was_attached():
     assert "문제가 있다" not in at.FILE_ONLY_QUESTION  # 문제가 있다고 단정하지 않는다
 
 
-def test_큰_노트북도_글만_뽑아_사용한다():
+def test_large_notebook_uses_text_only():
     import json
     notebook = {"nbformat": 4, "cells": [
         {"cell_type": "code", "source": "print(1)", "outputs": [{"output_type": "display_data", "data": {"image/png": "A" * 400_000}}]}]}
@@ -146,7 +146,7 @@ def test_큰_노트북도_글만_뽑아_사용한다():
     assert "print(1)" in text and "AAAA" not in text
 
 
-def test_노트북이_아닌_파일은_300KB_한도를_유지한다():
+def test_non_notebook_file_keeps_the_size_limit():
     import pytest
     with pytest.raises(ValueError):
         at.read_document("a.py", b"x" * (at.MAX_FILE_BYTES + 1))
