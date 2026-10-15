@@ -308,6 +308,16 @@ STYLE = """
  margin-block:0!important;padding-block:0!important;min-height:0!important;flex:0 0 auto!important;}
 .st-key-sidebar_history [data-testid="stButton"] button {
  min-height:32px!important;height:32px!important;padding-block:4px!important;}
+
+/* Highlight the current conversation while keeping message icons neutral. */
+.st-key-sidebar_history [data-testid="stButton"] button[kind="primary"],
+.st-key-sidebar_history [data-testid="stButton"] button[kind="primary"]:is(:hover,:focus,:active) {
+ background:#EEF2FF!important;border:1px solid #C7D2FE!important;color:#4F46E5!important;}
+.st-key-sidebar_history [data-testid="stButton"] button[kind="primary"] :is(p,strong,b) {
+ color:#4F46E5!important;font-weight:400!important;}
+.st-key-sidebar_history [data-testid="stButton"] button [data-testid="stIconMaterial"],
+.st-key-sidebar_history [data-testid="stButton"] button svg {
+ color:#8A9099!important;}
 </style>
 """
 
@@ -636,7 +646,7 @@ def render_saved_history(query):
             period = current
         if st.button(item["title"], key=f"saved_history_{item['id']}",
                      icon=":material/chat_bubble_outline:", width="stretch",
-                     type="secondary"):
+                     type="primary" if st.session_state.get("conversation_id") == item["id"] else "secondary"):
             if load_saved_conversation(item["id"]):
                 st.session_state.answer_mode = "OpenAI AI 답변"
                 st.session_state.previous_mode = "OpenAI AI 답변"
@@ -814,7 +824,7 @@ def render_sidebar():
                     st.caption(current)
                     period = current
                 if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch",
-                             type="secondary"):
+                             type="primary" if st.session_state.get("ui_thread") == key else "secondary"):
                     st.session_state.messages = deepcopy(item["messages"])
                     st.session_state.ui_scroll_to_latest = True
                     st.session_state.conversation_id = item["conversation_id"]
