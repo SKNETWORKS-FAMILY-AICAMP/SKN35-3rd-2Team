@@ -34,8 +34,8 @@ def read_jsonl(path):
 
 def git_state():
     try:
-        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=HERE, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", "src", "data"], capture_output=True, text=True, cwd=HERE, check=True).stdout.strip()
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=HERE.parents[1], check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "src", "data"], capture_output=True, text=True, cwd=HERE.parents[1], check=True).stdout.strip()
         return commit, "미커밋 변경 있음" if dirty else "미커밋 변경 없음"
     except Exception:
         return "알 수 없음", "알 수 없음"
