@@ -96,7 +96,7 @@ STYLE = """
 .st-key-composer_box {padding:0!important;gap:8px!important;}
 .st-key-composer_box [data-testid="stChatInput"] {border-radius:28px;}
 .st-key-composer_box [data-testid="stChatInput"] textarea {
- line-height:24px!important;max-height:192px!important;overflow-y:auto!important;}
+ line-height:24px!important;max-height:200px!important;overflow-y:auto!important;}
 .st-key-composer_box textarea {text-align:left!important;}
 .st-key-composer_box textarea::placeholder {text-align:left;}
 .st-key-composer_tools {gap:8px!important;}
@@ -232,6 +232,36 @@ STYLE = """
 .st-key-sidebar_history button[kind="primary"] p {color:var(--ui-accent)!important;font-weight:600;}
 .st-key-sidebar_footer {padding:14px 4px 4px;}
 @media (prefers-reduced-motion:reduce) { .st-key-composer * {transition:none!important;} }
+/* Grow from one line to eight, then scroll within the draft. */
+.st-key-composer [data-testid="stChatInput"] {overflow-anchor:none;}
+.st-key-composer [data-testid="stChatInput"] > div {display:flex;flex-direction:column;}
+.st-key-composer [data-testid="stChatInput"] textarea {
+ min-height:32px!important;max-height:200px!important;line-height:24px!important;
+ overflow-y:auto!important;overscroll-behavior-y:contain;}
+.st-key-composer [data-testid="stChatInput"] > div > div:has([data-testid="stFileChips"]) {
+ order:-1;flex-shrink:0;max-height:96px;overflow-y:auto;}
+.st-key-composer [data-testid="stFileChips"] {overflow-anchor:none;}
+/* Put attachment, draft and send controls on the same compact row. */
+.st-key-composer [data-testid="stChatInput"] > div > div:has(> div > textarea) {
+ display:grid!important;grid-template-columns:36px minmax(0,1fr) 36px;
+ align-items:center;gap:8px!important;}
+.st-key-composer [data-testid="stChatInput"] div:has(> textarea) {
+ grid-column:2;grid-row:1;min-width:0;}
+.st-key-composer [data-testid="stChatInput"] > div > div > div:has([data-testid="stChatInputFileUploadButton"]):has([data-testid="stChatInputSubmitButton"]) {
+ display:contents!important;}
+.st-key-composer [data-testid="stChatInput"] div:has(> [data-testid="stChatInputFileUploadButton"]) {
+ grid-column:1;grid-row:1;align-self:center;}
+.st-key-composer [data-testid="stChatInput"] div:has(> [data-testid="stChatInputSubmitButton"]) {
+ grid-column:3;grid-row:1;align-self:center;}
+.ui-upload-limit {padding:0 16px 8px;color:#B45309;font-size:13px;}
+/* st.bottom's resize scrolling moves the conversation on every draft edit. */
+.st-key-composer_dock {position:fixed;bottom:0;left:0;right:0;z-index:1000;
+ max-width:904px;margin-inline:auto;padding:8px 32px 16px;background:var(--ui-bg);box-sizing:border-box;}
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="true"]) .st-key-composer_dock {left:260px;}
+@media(max-width:640px) {
+ .st-key-composer_dock {padding-inline:16px;}
+ [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="true"]) .st-key-composer_dock {left:0;}
+}
 </style>
 """
 
@@ -239,6 +269,62 @@ STYLE = """
 UPLOAD_TOOLTIP = r"""
 <script>
 (() => {
+  // Custom DOM notices outlive React's draft reset unless explicitly cleared.
+  document.querySelectorAll('.st-key-composer .ui-upload-limit').forEach(el => el.remove());
+  if (window.codeclueUploadNoticeHandler) {
+    for (const type of ['click', 'keydown'])
+      document.removeEventListener(type, window.codeclueUploadNoticeHandler, true);
+  }
+  window.codeclueUploadNoticeHandler = event => {
+    const host = event.target.closest?.('.st-key-composer [data-testid="stChatInput"]');
+    if (!host) return;
+    const submit = host.querySelector('[data-testid="stChatInputSubmitButton"]');
+    const submitting = event.type === 'click'
+      ? event.target.closest('[data-testid="stChatInputSubmitButton"]')
+      : event.target.matches('textarea') && event.key === 'Enter'
+        && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
+    const removing = event.type === 'click' && event.target.closest('[data-testid="stFileChipDeleteBtn"]');
+    if ((submitting && submit && !submit.disabled) || removing)
+      host.querySelector('.ui-upload-limit')?.remove();
+  };
+  for (const type of ['click', 'keydown'])
+    document.addEventListener(type, window.codeclueUploadNoticeHandler, true);
+  // Capture uploads before React receives them. Streamlit has no image-count option.
+  if (window.codeclueUploadLimitHandler) {
+    for (const type of ['change', 'drop', 'paste'])
+      document.removeEventListener(type, window.codeclueUploadLimitHandler, true);
+  }
+  const isImage = file => /\.(png|jpe?g|webp)$/i.test(file.name) || file.type.startsWith('image/');
+  window.codeclueUploadLimitHandler = event => {
+    const host = event.target.closest?.('.st-key-composer [data-testid="stChatInput"]');
+    if (!host) return;
+    const files = [...(event.type === 'change' ? event.target.files || []
+      : event.type === 'drop' ? event.dataTransfer?.files || [] : event.clipboardData?.files || [])];
+    if (!files.length) return;
+    const existing = [...host.querySelectorAll('[data-testid="stFileChip"]')]
+      .filter(chip => /\.(png|jpe?g|webp)(?:,|$)/i.test(chip.getAttribute('aria-label') || '')).length;
+    let remaining = Math.max(0, 3 - existing);
+    const accepted = files.filter(file => !isImage(file) || remaining-- > 0);
+    const oldNotice = host.querySelector('.ui-upload-limit');
+    if (oldNotice) oldNotice.remove();
+    if (accepted.length === files.length) return;
+    const notice = document.createElement('div');
+    notice.className = 'ui-upload-limit';
+    notice.setAttribute('role', 'status');
+    notice.textContent = '이미지는 3장만 넣어주세요.';
+    host.appendChild(notice);
+    if (event.type === 'change' && accepted.length) {
+      const transfer = new DataTransfer();
+      accepted.forEach(file => transfer.items.add(file));
+      event.target.files = transfer.files;
+    } else {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.type === 'change') event.target.value = '';
+    }
+  };
+  for (const type of ['change', 'drop', 'paste'])
+    document.addEventListener(type, window.codeclueUploadLimitHandler, true);
   if (window.codeclueCopyHandler) {
     document.removeEventListener("click", window.codeclueCopyHandler);
     delete window.codeclueCopyHandler;
@@ -247,6 +333,11 @@ UPLOAD_TOOLTIP = r"""
   window.codeclueDraftHandler = event => {
     const textarea = event.target;
     if (!textarea.matches('.st-key-composer textarea')) return;
+    // Include the native 8px vertical padding: 24px per line, up to eight lines.
+    const scrollTop = textarea.scrollTop;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(200, Math.max(32, textarea.scrollHeight)) + 'px';
+    textarea.scrollTop = scrollTop;
     const host = textarea.closest('[data-testid="stChatInput"]');
     let preview = host.querySelector('.ui-draft-code');
     const fences = [...textarea.value.matchAll(/```([^\n`]*)\n([\s\S]*?)(?:```|$)/g)];
@@ -809,7 +900,7 @@ def render_preview_body(kind):
 
 
 def render_composer(preview):
-    with st.bottom:
+    with st.container(key="composer_dock"):
         with st.container(key="composer"):
             with st.container(key="composer_box"):
                 prompt = st.chat_input("에러 메시지와 관련 코드를 입력해 주세요.", key="chat_input",
@@ -843,6 +934,9 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     with st.container(key="generation_progress"):
         progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
     answer_slot = st.empty()
+    if images:
+        # The pending image message is already rendered, before model work starts.
+        scroll_to_latest_question(target=len(st.session_state.messages))
     streamed = []
     def show_token(token):
         streamed.append(token)
@@ -879,20 +973,24 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
             st.session_state.setdefault("ui_answer_timings", {})[timing_key] = elapsed_seconds
         st.session_state.ui_failure = None
         remember_conversation(mode)
+        if images:
+            # Restore the same image position after the completed answer reruns.
+            st.session_state.ui_scroll_to_latest = True
     else:
         st.session_state.ui_failure = {"message": user_message, "result": result, "saved_in_history": persisted}
     st.rerun()
 
 
 
-def scroll_to_latest_question():
-    if not st.session_state.pop("ui_scroll_to_latest", False):
-        return
-    indices = [index for index, message in enumerate(st.session_state.messages)
-               if message["role"] == "user"]
-    if not indices:
-        return
-    target = indices[-1]
+def scroll_to_latest_question(target=None):
+    if target is None:
+        if not st.session_state.pop("ui_scroll_to_latest", False):
+            return
+        indices = [index for index, message in enumerate(st.session_state.messages)
+                   if message["role"] == "user"]
+        if not indices:
+            return
+        target = indices[-1]
     # Leave room below a short final answer so the question can reach the top.
     st.html(f"""
     <div style="height:100dvh" aria-hidden="true"></div>
