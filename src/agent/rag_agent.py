@@ -1,6 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from src.const.rag_config import MAX_RETRY, RERANK_SCORE_THRESHOLD
+from src.graph.node.rag.clear_documents_node import clear_documents_node
 from src.graph.node.rag.context_compressor_node import context_compressor_node
 from src.graph.node.rag.filter_documents_by_score_node import (
     filter_documents_by_score_node,
@@ -57,6 +58,7 @@ def rag_agent():
     builder.add_node("retry_counter", retry_counter_node)
     builder.add_node("filter_documents_by_score", filter_documents_by_score_node)
     builder.add_node("context_compressor", context_compressor_node)
+    builder.add_node("clear_documents", clear_documents_node)
 
     builder.add_edge(START, "query_rewrite")
     builder.add_edge("query_rewrite", "multi_query")
@@ -70,12 +72,11 @@ def rag_agent():
         {
             "compress": "filter_documents_by_score",
             "retry": "retry_counter",
-            "give_up": END,
+            "give_up": "clear_documents",
         },
     )
-
     builder.add_edge("filter_documents_by_score", "context_compressor")
-
+    builder.add_edge("clear_documents", END)
     builder.add_edge("retry_counter", "query_rewrite")
 
     builder.add_edge("context_compressor", END)
