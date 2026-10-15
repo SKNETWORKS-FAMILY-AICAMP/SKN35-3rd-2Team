@@ -3,8 +3,11 @@ from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from html import escape
 from uuid import uuid4
+from time import perf_counter
 
 import streamlit as st
+
+from src.app.ui_components import example_cards, copy_answer
 
 from src import db
 from src.app.browser_auth import forget_login, remember_login, restore_login
@@ -34,11 +37,11 @@ STYLE = """
 .st-key-generation_progress [data-testid="stSpinnerIcon"],
 .st-key-generation_progress [data-testid="stSpinner"] {display:none!important;}
 :root {--ui-bg:#F8FAFC;--ui-panel:#F1F5F9;--ui-border:#E2E8F0;
- --ui-ink:#1E293B;--ui-muted:#64748B;--ui-accent:#4F46E5;}
+ --ui-ink:#1E293B;--ui-muted:#64748B;--ui-accent:#4F46E5;--ui-radius:16px;--ui-focus:rgba(79,70,229,.12);}
 [data-testid="stAppViewContainer"], [data-testid="stMain"] {background:var(--ui-bg);color:var(--ui-ink);}
 [data-testid="stSidebar"] {background:var(--ui-panel);border-right:1px solid var(--ui-border);}
 [data-testid="stSidebar"] p {color:var(--ui-ink);}
-[data-testid="stMainBlockContainer"] {max-width:904px;padding:4rem 2rem 340px;}
+[data-testid="stMainBlockContainer"] {max-width:904px;padding:1rem 2rem 220px;}
 [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {gap:12px;}
 .stApp, .stApp input, .stApp textarea, .stApp button {font-family:Pretendard,"Noto Sans KR","Malgun Gothic",sans-serif;}
 .stApp h1,.stApp h2,.stApp h3 {color:var(--ui-ink);letter-spacing:-.035em;}
@@ -71,7 +74,7 @@ STYLE = """
  transition:border-color .15s ease,box-shadow .15s ease;}
 .st-key-composer [data-testid="stChatInput"]:focus-within {
  border-color:var(--ui-accent)!important;
- box-shadow:0 0 0 1px var(--ui-accent),0 2px 10px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.05);}
+ box-shadow:0 0 0 3px var(--ui-focus),0 4px 16px rgba(15,23,42,.05);}
 .st-key-composer [data-testid="stChatInput"] {
  --primary-color:var(--ui-accent);}
 .st-key-composer [data-testid="stChatInput"] div:focus-within,
@@ -103,15 +106,14 @@ STYLE = """
 .st-key-composer_box {padding:0!important;gap:8px!important;}
 .st-key-composer_box [data-testid="stChatInput"] {border-radius:28px;}
 .st-key-composer_box [data-testid="stChatInput"] textarea {
- line-height:24px!important;max-height:192px!important;overflow-y:auto!important;}
+ line-height:24px!important;max-height:200px!important;overflow-y:auto!important;}
 .st-key-composer_box textarea {text-align:left!important;}
-.st-key-composer_box textarea::placeholder {text-align:right;}
+.st-key-composer_box textarea::placeholder {text-align:left;}
 .st-key-composer_tools {gap:8px!important;}
 [data-testid="stHeader"] {background:var(--ui-bg);}
-[data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:300px;}
+[data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:220px;}
 [data-testid="stBottomBlockContainer"] {margin-inline:auto;}
-.st-key-composer [data-testid="stChatInput"] .e1p9v2yr2 {
- justify-content:flex-start;}
+
 .ui-sidebar-description {white-space:nowrap;font-size:12px;line-height:1.5;letter-spacing:-0.3px;color:var(--ui-muted);}
 /* Keep account controls visible; only the conversation list scrolls. */
 [data-testid="stSidebarContent"] {overflow:hidden!important;}
@@ -206,7 +208,7 @@ STYLE = """
  width:40px!important;height:40px!important;overflow:visible!important;
  visibility:visible!important;opacity:1!important;z-index:1000001!important;}
 [data-testid="stSidebarCollapsedControl"] button {visibility:visible!important;opacity:1!important;}
-.st-key-sidebar_header [data-testid="stTextInput"] input {text-align:center;}
+.st-key-sidebar_header [data-testid="stTextInput"] input {text-align:left;}
 .st-key-composer [data-testid="stChatInput"] textarea,
 .st-key-composer [data-testid="stChatInput"] [data-baseweb="textarea"] {background:var(--ui-bg)!important;}
 .ui-draft-code {padding:12px;max-height:192px;overflow:auto;}
@@ -224,6 +226,52 @@ STYLE = """
  transition:none!important;top:0!important;right:0!important;padding:8px 12px!important;}
 [class*="st-key-user_message_"] {background:var(--ui-panel);border-radius:16px;padding:12px 20px;margin-left:auto;
  width:fit-content!important;max-width:100%!important;min-width:0;box-sizing:border-box;}
+/* Show the loading spinner only beside elapsed time. */
+.st-key-generation_progress [data-testid="stExpanderIconSpinner"],
+.st-key-generation_progress [data-testid="stSpinner"],
+.st-key-generation_progress [data-testid="stStatusWidget"] {display:none!important;}
+/* The submit hint overlaps typed text in the narrow sidebar search field. */
+.st-key-history_search [data-testid="InputInstructions"],
+.st-key-history_search [data-testid="stInputInstructions"] {display:none!important;}
+/* Interaction states share the same design tokens. */
+.st-key-composer [data-testid="stChatInput"] {background:white;}
+.st-key-composer [data-testid="stChatInput"] textarea,
+.st-key-composer [data-testid="stChatInput"] [data-baseweb="textarea"] {background:transparent!important;}
+.st-key-composer [data-testid="stChatInputSubmitButton"]:disabled {opacity:.4;}
+.st-key-sidebar_history button[kind="primary"] {background:#EEF2FF!important;border-color:#C7D2FE!important;}
+.st-key-sidebar_history button[kind="primary"] p {color:var(--ui-accent)!important;font-weight:600;}
+.st-key-sidebar_footer {padding:14px 4px 4px;}
+@media (prefers-reduced-motion:reduce) { .st-key-composer * {transition:none!important;} }
+/* Grow from one line to eight, then scroll within the draft. */
+.st-key-composer [data-testid="stChatInput"] {overflow-anchor:none;}
+.st-key-composer [data-testid="stChatInput"] > div {display:flex;flex-direction:column;}
+.st-key-composer [data-testid="stChatInput"] textarea {
+ min-height:32px!important;max-height:200px!important;line-height:24px!important;
+ overflow-y:auto!important;overscroll-behavior-y:contain;}
+.st-key-composer [data-testid="stChatInput"] > div > div:has([data-testid="stFileChips"]) {
+ order:-1;flex-shrink:0;max-height:96px;overflow-y:auto;}
+.st-key-composer [data-testid="stFileChips"] {overflow-anchor:none;}
+/* Put attachment, draft and send controls on the same compact row. */
+.st-key-composer [data-testid="stChatInput"] > div > div:has(> div > textarea) {
+ display:grid!important;grid-template-columns:36px minmax(0,1fr) 36px;
+ align-items:center;gap:8px!important;}
+.st-key-composer [data-testid="stChatInput"] div:has(> textarea) {
+ grid-column:2;grid-row:1;min-width:0;}
+.st-key-composer [data-testid="stChatInput"] > div > div > div:has([data-testid="stChatInputFileUploadButton"]):has([data-testid="stChatInputSubmitButton"]) {
+ display:contents!important;}
+.st-key-composer [data-testid="stChatInput"] div:has(> [data-testid="stChatInputFileUploadButton"]) {
+ grid-column:1;grid-row:1;align-self:center;}
+.st-key-composer [data-testid="stChatInput"] div:has(> [data-testid="stChatInputSubmitButton"]) {
+ grid-column:3;grid-row:1;align-self:center;}
+.ui-upload-limit {padding:0 16px 8px;color:#B45309;font-size:13px;}
+/* st.bottom's resize scrolling moves the conversation on every draft edit. */
+.st-key-composer_dock {position:fixed;bottom:0;left:0;right:0;z-index:1000;
+ max-width:904px;margin-inline:auto;padding:8px 32px 16px;background:var(--ui-bg);box-sizing:border-box;}
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="true"]) .st-key-composer_dock {left:260px;}
+@media(max-width:640px) {
+ .st-key-composer_dock {padding-inline:16px;}
+ [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="true"]) .st-key-composer_dock {left:0;}
+}
 </style>
 """
 
@@ -231,6 +279,62 @@ STYLE = """
 UPLOAD_TOOLTIP = r"""
 <script>
 (() => {
+  // Custom DOM notices outlive React's draft reset unless explicitly cleared.
+  document.querySelectorAll('.st-key-composer .ui-upload-limit').forEach(el => el.remove());
+  if (window.codeclueUploadNoticeHandler) {
+    for (const type of ['click', 'keydown'])
+      document.removeEventListener(type, window.codeclueUploadNoticeHandler, true);
+  }
+  window.codeclueUploadNoticeHandler = event => {
+    const host = event.target.closest?.('.st-key-composer [data-testid="stChatInput"]');
+    if (!host) return;
+    const submit = host.querySelector('[data-testid="stChatInputSubmitButton"]');
+    const submitting = event.type === 'click'
+      ? event.target.closest('[data-testid="stChatInputSubmitButton"]')
+      : event.target.matches('textarea') && event.key === 'Enter'
+        && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
+    const removing = event.type === 'click' && event.target.closest('[data-testid="stFileChipDeleteBtn"]');
+    if ((submitting && submit && !submit.disabled) || removing)
+      host.querySelector('.ui-upload-limit')?.remove();
+  };
+  for (const type of ['click', 'keydown'])
+    document.addEventListener(type, window.codeclueUploadNoticeHandler, true);
+  // Capture uploads before React receives them. Streamlit has no image-count option.
+  if (window.codeclueUploadLimitHandler) {
+    for (const type of ['change', 'drop', 'paste'])
+      document.removeEventListener(type, window.codeclueUploadLimitHandler, true);
+  }
+  const isImage = file => /\.(png|jpe?g|webp)$/i.test(file.name) || file.type.startsWith('image/');
+  window.codeclueUploadLimitHandler = event => {
+    const host = event.target.closest?.('.st-key-composer [data-testid="stChatInput"]');
+    if (!host) return;
+    const files = [...(event.type === 'change' ? event.target.files || []
+      : event.type === 'drop' ? event.dataTransfer?.files || [] : event.clipboardData?.files || [])];
+    if (!files.length) return;
+    const existing = [...host.querySelectorAll('[data-testid="stFileChip"]')]
+      .filter(chip => /\.(png|jpe?g|webp)(?:,|$)/i.test(chip.getAttribute('aria-label') || '')).length;
+    let remaining = Math.max(0, 3 - existing);
+    const accepted = files.filter(file => !isImage(file) || remaining-- > 0);
+    const oldNotice = host.querySelector('.ui-upload-limit');
+    if (oldNotice) oldNotice.remove();
+    if (accepted.length === files.length) return;
+    const notice = document.createElement('div');
+    notice.className = 'ui-upload-limit';
+    notice.setAttribute('role', 'status');
+    notice.textContent = '이미지는 3장만 넣어주세요.';
+    host.appendChild(notice);
+    if (event.type === 'change' && accepted.length) {
+      const transfer = new DataTransfer();
+      accepted.forEach(file => transfer.items.add(file));
+      event.target.files = transfer.files;
+    } else {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.type === 'change') event.target.value = '';
+    }
+  };
+  for (const type of ['change', 'drop', 'paste'])
+    document.addEventListener(type, window.codeclueUploadLimitHandler, true);
   if (window.codeclueCopyHandler) {
     document.removeEventListener("click", window.codeclueCopyHandler);
     delete window.codeclueCopyHandler;
@@ -239,6 +343,11 @@ UPLOAD_TOOLTIP = r"""
   window.codeclueDraftHandler = event => {
     const textarea = event.target;
     if (!textarea.matches('.st-key-composer textarea')) return;
+    // Include the native 8px vertical padding: 24px per line, up to eight lines.
+    const scrollTop = textarea.scrollTop;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(200, Math.max(32, textarea.scrollHeight)) + 'px';
+    textarea.scrollTop = scrollTop;
     const host = textarea.closest('[data-testid="stChatInput"]');
     let preview = host.querySelector('.ui-draft-code');
     const fences = [...textarea.value.matchAll(/```([^\n`]*)\n([\s\S]*?)(?:```|$)/g)];
@@ -490,7 +599,8 @@ def render_saved_history(query):
             st.caption(current)
             period = current
         if st.button(item["title"], key=f"saved_history_{item['id']}",
-                     icon=":material/chat_bubble_outline:", width="stretch"):
+                     icon=":material/chat_bubble_outline:", width="stretch",
+                     type="primary" if st.session_state.get("conversation_id") == item["id"] else "secondary"):
             if load_saved_conversation(item["id"]):
                 st.session_state.answer_mode = "OpenAI AI 답변"
                 st.session_state.previous_mode = "OpenAI AI 답변"
@@ -667,7 +777,8 @@ def render_sidebar():
                 if current != period:
                     st.caption(current)
                     period = current
-                if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch"):
+                if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch",
+                             type="primary" if st.session_state.get("ui_thread") == key else "secondary"):
                     st.session_state.messages = deepcopy(item["messages"])
                     st.session_state.ui_scroll_to_latest = True
                     st.session_state.conversation_id = item["conversation_id"]
@@ -697,21 +808,12 @@ def render_welcome_body():
     <p>LangChain · LangGraph · MCP의 개발 오류를 함께 살펴봅니다.</p>
     <div class="ui-tags"><span class="ui-tag">LangChain</span><span class="ui-tag">LangGraph</span><span class="ui-tag">MCP</span></div></section>''')
     st.caption("이런 질문으로 시작해 보세요")
-    for index, (column, example) in enumerate(zip(st.columns(3), EXAMPLES)):
-        tech, title, question, name = example
-        with column, st.container(border=True, key=f"example_{index}"):
-            st.html(f'<div class="ui-tech">{tech}{icon(name)}</div>')
-            st.markdown(f"**{title}**")
-            description = question
-            if tech == "LangGraph":
-                description = question.replace("다음 Node에 ", "다음 Node에  \n")
-            elif tech == "MCP":
-                description = question.replace("클라이언트가 ", "클라이언트가  \n")
-            with st.container(height=48, border=False, key=f"example_description_{index}"):
-                st.caption(description)
-            st.button("질문 입력", key=f"example_select_{index}", icon=":material/north_east:", width="stretch",
-                      on_click=select_example_question,
-                      args=(f"{tech}에서 {question} 어떤 부분을 확인해야 하나요?",))
+    def choose_example():
+        selected = st.session_state["welcome_cards"].get("selected")
+        if isinstance(selected, int) and 0 <= selected < len(EXAMPLES):
+            tech, _, question, _ = EXAMPLES[selected]
+            select_example_question(f"{tech}에서 {question} 어떤 부분을 확인해야 하나요?")
+    example_cards(EXAMPLES, on_selected_change=choose_example)
     st.caption("관련 코드와 개발 환경을 함께 알려주시면 원인을 좁히는 데 도움이 됩니다.", text_alignment="center")
 
 
@@ -751,9 +853,13 @@ def render_message(message, index):
         st.html(f'<div class="ui-assistant"><div class="ui-assistant-icon">{icon("assistant",16)}</div>CodeClue</div>')
         st.markdown(message["content"])
         render_sources(message.get("sources", []))
-        with st.popover("답변 복사", icon=":material/content_copy:"):
-            st.caption("오른쪽 위 복사 버튼으로 전체 답변을 복사하세요.")
-            st.code(message["content"], language=None, wrap_lines=True)
+        elapsed = message.get("elapsed_seconds")
+        if elapsed is None:
+            timing_key = (st.session_state.get("user_id"), st.session_state.get("conversation_id"), index)
+            elapsed = st.session_state.get("ui_answer_timings", {}).get(timing_key)
+        if elapsed is not None:
+            st.caption(f"생성 소요시간 · {elapsed:.1f}초")
+        copy_answer(message["content"], key=f"copy_answer_{index}")
 
 
 
@@ -804,7 +910,7 @@ def render_preview_body(kind):
 
 
 def render_composer(preview):
-    with st.bottom:
+    with st.container(key="composer_dock"):
         with st.container(key="composer"):
             with st.container(key="composer_box"):
                 prompt = st.chat_input("에러 메시지와 관련 코드를 입력해 주세요.", key="chat_input",
@@ -838,10 +944,14 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     with st.container(key="generation_progress"):
         progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
     answer_slot = st.empty()
+    if images:
+        # The pending image message is already rendered, before model work starts.
+        scroll_to_latest_question(target=len(st.session_state.messages))
     streamed = []
     def show_token(token):
         streamed.append(token)
         answer_slot.markdown("".join(streamed) + "▌")
+    started_at = perf_counter()
     with st.spinner("경과 시간", show_time=True):
         result = generate_answer(graph_messages(st.session_state.messages) + [user_message], mode,
                                  user_id=st.session_state.get("user_id"),
@@ -850,6 +960,7 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
                                  on_stage=lambda label: progress.update(label=label))
         if result["status"] == "success":
             progress.update(label="답변 완성", state="complete")
+    elapsed_seconds = perf_counter() - started_at
     if result["status"] != "success":
         progress.empty()
     if result["status"] == "success":
@@ -864,23 +975,32 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     if result["status"] == "success":
         if not persisted:
             user_message = {**user_message, "image_analysis": result.get("image_analysis")}  # 로그인 안 해도 읽은 내용을 보여 준다
-            st.session_state.messages.extend([user_message, {"role": "assistant", "content": result["answer"], "sources": result["sources"]}])
+            st.session_state.messages.extend([user_message, {"role": "assistant", "content": result["answer"], "sources": result["sources"], "elapsed_seconds": elapsed_seconds}])
+        if persisted and st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
+            index = len(st.session_state.messages) - 1
+            st.session_state.messages[index]["elapsed_seconds"] = elapsed_seconds
+            timing_key = (st.session_state.get("user_id"), st.session_state.get("conversation_id"), index)
+            st.session_state.setdefault("ui_answer_timings", {})[timing_key] = elapsed_seconds
         st.session_state.ui_failure = None
         remember_conversation(mode)
+        if images:
+            # Restore the same image position after the completed answer reruns.
+            st.session_state.ui_scroll_to_latest = True
     else:
         st.session_state.ui_failure = {"message": user_message, "result": result, "saved_in_history": persisted}
     st.rerun()
 
 
 
-def scroll_to_latest_question():
-    if not st.session_state.pop("ui_scroll_to_latest", False):
-        return
-    indices = [index for index, message in enumerate(st.session_state.messages)
-               if message["role"] == "user"]
-    if not indices:
-        return
-    target = indices[-1]
+def scroll_to_latest_question(target=None):
+    if target is None:
+        if not st.session_state.pop("ui_scroll_to_latest", False):
+            return
+        indices = [index for index, message in enumerate(st.session_state.messages)
+                   if message["role"] == "user"]
+        if not indices:
+            return
+        target = indices[-1]
     # Leave room below a short final answer so the question can reach the top.
     st.html(f"""
     <div style="height:100dvh" aria-hidden="true"></div>
