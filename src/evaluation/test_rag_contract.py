@@ -1,5 +1,5 @@
 from unittest.mock import Mock
-
+   # 가상적인 Graph 객체를 만들기 위해 Mock을 사용합니다. 실제 Graph 객체를 사용하지 않고 테스트를 수행할 수 있습니다.
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
