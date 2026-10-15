@@ -216,6 +216,13 @@ STYLE = """
  transition:none!important;top:0!important;right:0!important;padding:8px 12px!important;}
 [class*="st-key-user_message_"] {background:var(--ui-panel);border-radius:16px;padding:12px 20px;margin-left:auto;
  width:fit-content!important;max-width:100%!important;min-width:0;box-sizing:border-box;}
+/* Show the loading spinner only beside elapsed time. */
+.st-key-generation_progress [data-testid="stExpanderIconSpinner"],
+.st-key-generation_progress [data-testid="stSpinner"],
+.st-key-generation_progress [data-testid="stStatusWidget"] {display:none!important;}
+/* The submit hint overlaps typed text in the narrow sidebar search field. */
+.st-key-history_search [data-testid="InputInstructions"],
+.st-key-history_search [data-testid="stInputInstructions"] {display:none!important;}
 /* Interaction states share the same design tokens. */
 .st-key-composer [data-testid="stChatInput"] {background:white;}
 .st-key-composer [data-testid="stChatInput"] textarea,
@@ -833,7 +840,8 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     question = prompt or default_question(images, bool(context))
     user_message = prepared or {"role": "user", "content": environment_question(question) + context,
                                 "display_content": question, "images": images or []}
-    progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
+    with st.container(key="generation_progress"):
+        progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
     answer_slot = st.empty()
     streamed = []
     def show_token(token):
