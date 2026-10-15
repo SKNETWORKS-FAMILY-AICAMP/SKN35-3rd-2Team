@@ -3,11 +3,11 @@
 
     python -m src.evaluation.retrieval_make_dataset_2026_10_15
 
-- 정답 있는 질문: 청크를 보고 gpt-4o-mini가 질문을 만든다. 그 청크가 곧 정답(원본 청크)이다.
+- 정답 있는 질문: 벡터 DB(Pinecone 인덱스)의 청크를 보고 gpt-4o-mini가 질문을 만든다. 그 청크가 곧 정답(원본 청크)이다.
   40개 중 28개는 청크 1개, 12개는 같은 문서의 이웃 청크 2개를 함께 읽어야 답할 수 있는 질문(복수 근거)이다.
   기술(langchain, langgraph, mcp)별로 고르게 뽑고, 튜닝용 20개와 최종용 20개로 나눈다 (기술별 비율이 같게).
 - 정답 없는 질문: 사람이 읽고 검토할 수 있게 코드에 직접 적어 두었다 (모르는 내부 라이브러리, 정보 부족, 범위 밖).
-- 모델 이름은 환경변수 EVAL_MODEL (없으면 gpt-4o-mini). 같은 시드면 같은 청크를 뽑는다.
+- 모델 이름은 환경변수 EVAL_MODEL (없으면 gpt-4o-mini). 같은 시드와 같은 인덱스면 같은 청크를 뽑는다.
 - 결과: retrieval_questions_2026-10-15.jsonl (이 폴더). 이미 있으면 덮어쓰지 않는다 (--force로만 덮어쓴다).
 """
 
@@ -22,9 +22,9 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from src.const.config import OPEN_API_KEY
+from src.evaluation.index_chunks_2026_10_15 import all_chunks, get_index
 
 HERE = Path(__file__).resolve().parent
-CHUNKS_PATH = HERE.parents[1] / "data" / "processed" / "chunks.jsonl"
 OUTPUT_PATH = HERE / "retrieval_questions_2026-10-15.jsonl"
 
 SEED = 20261015
@@ -85,8 +85,8 @@ MULTI_PROMPT = """아래는 {tech} 공식 문서에서 이어진 두 부분이�
 
 
 def load_chunks():
-    rows = [json.loads(line) for line in CHUNKS_PATH.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return rows
+    """벡터 DB(인덱스)의 모든 청크. 질문의 정답 청크 ID가 앱의 검색 결과 ID와 같은 기준이 된다."""
+    return all_chunks(get_index())
 
 
 def usable(row):
