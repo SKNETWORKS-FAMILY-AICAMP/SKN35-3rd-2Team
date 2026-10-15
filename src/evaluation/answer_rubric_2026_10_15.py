@@ -20,9 +20,9 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from src.const.config import OPEN_API_KEY
+from src.evaluation.index_chunks_2026_10_15 import fetch_chunks, get_index
 
 HERE = Path(__file__).resolve().parent
-CHUNKS_PATH = HERE.parents[1] / "data" / "processed" / "chunks.jsonl"
 QUESTIONS_PATH = HERE / "retrieval_questions_2026-10-15.jsonl"
 OUTPUT_PATH = HERE / "answer_rubric_2026-10-15.jsonl"
 
@@ -73,14 +73,18 @@ def main():
     if OUTPUT_PATH.exists() and not args.force:
         raise SystemExit(f"{OUTPUT_PATH.name}이(가) 이미 있습니다. 덮어쓰려면 --force를 붙이세요.")
 
-    chunks = {row["chunk_id"]: row for row in read_jsonl(CHUNKS_PATH)}
+    questions = read_jsonl(QUESTIONS_PATH)
+    chunks = fetch_chunks(get_index(), [cid for q in questions if q["type"] == "answerable" for cid in q["source_chunk_ids"]])
     name = os.getenv("EVAL_MODEL") or "gpt-4o-mini"
     llm = ChatOpenAI(api_key=OPEN_API_KEY, model=name, temperature=0.0, timeout=120).with_structured_output(Rubric)
 
     records = []
-    for question in read_jsonl(QUESTIONS_PATH):
+    for question in questions:
         if question["type"] == "answerable":
-            context = "\n\n".join(f"[{chunks[cid]['title']}]\n{chunks[cid]['text']}" for cid in question["source_chunk_ids"])
+            context = "\n\n".join(f"[{chunks[cid]['title']}]\n{chunks[cid]['text']}" for cid in question["source_chunk_ids"] if cid in chunks)
+            if not context:  # 인덱스에서 원본 청크를 찾지 못한 질문은 근거 글이 없어 체크리스트를 만들지 않는다
+                print(question["id"], "원본 청크가 없어 건너뜀", flush=True)
+                continue
             rubric = llm.invoke(PROMPT.format(question=question["question"], context=context))
             record = {"must_include": rubric.must_include, "must_not": rubric.must_not, "made_by": name}
         else:

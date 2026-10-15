@@ -192,10 +192,11 @@ def review_sample(results, rows_by_key, rubrics):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tag", default="baseline")
+    parser.add_argument("--answers-tag", default=None, help="채점할 답변 파일의 tag (없으면 --tag와 같다). 같은 답변을 체크리스트만 바꿔 다시 채점할 때 쓴다")
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
 
-    answers_path = HERE / f"answers_2026-10-15_{args.tag}.jsonl"
+    answers_path = HERE / f"answers_2026-10-15_{args.answers_tag or args.tag}.jsonl"
     rubric_path = HERE / "answer_rubric_2026-10-15.jsonl"
     if not answers_path.exists() or not rubric_path.exists():
         raise SystemExit("answers_2026-10-15_<tag>.jsonl과 answer_rubric_2026-10-15.jsonl이 모두 필요합니다.")
