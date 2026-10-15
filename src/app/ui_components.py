@@ -18,13 +18,13 @@ _CARDS = st.components.v2.component(
     :host {font-family:Pretendard,"Malgun Gothic",sans-serif;color:#1E293B;}
     .cards {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:4px;}
     button {font:inherit;text-align:left;background:#fff;border:1px solid #E2E8F0;
-      border-radius:16px;padding:20px;cursor:pointer;min-height:166px;transition:background .15s,border-color .15s,transform .15s;}
+      border-radius:16px;padding:20px;cursor:pointer;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-height:166px;transition:background .15s,border-color .15s,transform .15s;}
     button:hover {background:#FAFAFF;border-color:#A5B4FC;transform:translateY(-2px);}
     button:focus-visible {outline:3px solid #C7D2FE;outline-offset:2px;}
     .tech {display:flex;justify-content:space-between;color:#4F46E5;font-size:12px;margin-bottom:14px;}
-    .tech {align-items:center;}
-    .tech-label {display:inline-flex;align-items:center;gap:8px;}
-    .tech-label img {width:24px;height:24px;}
+    .tech {align-items:center;min-height:24px;flex:none;font-size:14px;line-height:24px;}
+    .tech-label {display:inline-flex;align-items:center;gap:8px;min-height:24px;}
+    .tech-label img {display:block;width:16px;height:16px;flex:0 0 16px;object-fit:contain;}
     strong {display:block;font-size:14px;line-height:1.5;margin-bottom:8px;}
     p {font-size:12px;line-height:1.7;color:#64748B;margin:0;}
     @media(max-width:600px) {.cards {grid-template-columns:1fr;} button {min-height:120px;}}
