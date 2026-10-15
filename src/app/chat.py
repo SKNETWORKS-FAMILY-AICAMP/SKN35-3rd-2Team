@@ -41,7 +41,7 @@ STYLE = """
 [data-testid="stAppViewContainer"], [data-testid="stMain"] {background:var(--ui-bg);color:var(--ui-ink);}
 [data-testid="stSidebar"] {background:var(--ui-panel);border-right:1px solid var(--ui-border);}
 [data-testid="stSidebar"] p {color:var(--ui-ink);}
-[data-testid="stMainBlockContainer"] {max-width:904px;padding:1rem 2rem 220px;}
+[data-testid="stMainBlockContainer"] {max-width:904px;padding:1rem 2rem var(--ui-composer-clearance,96px);}
 [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {gap:12px;}
 .stApp, .stApp input, .stApp textarea, .stApp button {font-family:Pretendard,"Noto Sans KR","Malgun Gothic",sans-serif;}
 .stApp h1,.stApp h2,.stApp h3 {color:var(--ui-ink);letter-spacing:-.035em;}
@@ -111,7 +111,7 @@ STYLE = """
 .st-key-composer_box textarea::placeholder {text-align:left;}
 .st-key-composer_tools {gap:8px!important;}
 [data-testid="stHeader"] {background:var(--ui-bg);}
-[data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:220px;}
+[data-testid="stMainBlockContainer"] {margin-inline:auto;padding-bottom:var(--ui-composer-clearance,96px);}
 [data-testid="stBottomBlockContainer"] {margin-inline:auto;}
 
 .ui-sidebar-description {white-space:nowrap;font-size:12px;line-height:1.5;letter-spacing:-0.3px;color:var(--ui-muted);}
@@ -238,8 +238,8 @@ STYLE = """
 .st-key-composer [data-testid="stChatInput"] textarea,
 .st-key-composer [data-testid="stChatInput"] [data-baseweb="textarea"] {background:transparent!important;}
 .st-key-composer [data-testid="stChatInputSubmitButton"]:disabled {opacity:.4;}
-.st-key-sidebar_history button[kind="primary"] {background:#EEF2FF!important;border-color:#C7D2FE!important;}
-.st-key-sidebar_history button[kind="primary"] p {color:var(--ui-accent)!important;font-weight:600;}
+.st-key-sidebar_history button[kind="primary"] {background:transparent!important;border-color:transparent!important;}
+.st-key-sidebar_history button[kind="primary"] p {color:#262626!important;font-weight:400;}
 .st-key-sidebar_footer {padding:14px 4px 4px;}
 @media (prefers-reduced-motion:reduce) { .st-key-composer * {transition:none!important;} }
 /* Grow from one line to eight, then scroll within the draft. */
@@ -272,6 +272,42 @@ STYLE = """
  .st-key-composer_dock {padding-inline:16px;}
  [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][aria-expanded="true"]) .st-key-composer_dock {left:0;}
 }
+
+/* Align the new conversation action with the history titles. */
+.st-key-sidebar_header [data-testid="stButton"] button,
+.st-key-sidebar_header [data-testid="stButton"] button > div {justify-content:flex-start!important;text-align:left!important;}
+.st-key-sidebar_header [data-testid="stButton"] button p {text-align:left!important;}
+.st-key-sidebar_history button[kind="primary"] {background:transparent!important;border-color:transparent!important;}
+.st-key-sidebar_history button[kind="primary"] p {color:#262626!important;font-weight:400;}
+
+/* Conversation history follows the supplied sidebar reference. */
+.st-key-sidebar_history [data-testid="stButton"] button {
+ min-height:36px!important;height:36px!important;padding:6px 12px!important;gap:8px!important;
+ color:#262626!important;justify-content:flex-start!important;}
+.st-key-sidebar_history [data-testid="stButton"] button > div {justify-content:flex-start!important;min-width:0;}
+.st-key-sidebar_history [data-testid="stButton"] button p {
+ color:#262626!important;font-size:14px!important;line-height:20px!important;font-weight:400!important;
+ text-align:left!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+.st-key-sidebar_history [data-testid="stCaptionContainer"] {color:#7A8695!important;font-size:13px!important;}
+.st-key-sidebar_history [data-testid="stVerticalBlock"] {gap:2px!important;}
+.st-key-sidebar_history [data-testid="stButton"] button [data-testid="stIconMaterial"] {
+ font-size:16px!important;width:16px!important;height:16px!important;line-height:16px!important;
+ flex:0 0 16px!important;}
+.st-key-sidebar_history [data-testid="stButton"] button svg {width:16px!important;height:16px!important;}
+
+/* Keep saved titles at normal weight, including Markdown in a title. */
+.st-key-sidebar_history [data-testid="stButton"] button,
+.st-key-sidebar_history [data-testid="stButton"] button :is(p,strong,b) {font-weight:400!important;}
+.st-key-sidebar_history [data-testid="stButton"] button [data-testid="stIconMaterial"],
+.st-key-sidebar_history [data-testid="stButton"] button svg {color:#8A9099!important;}
+
+/* The keyed history container itself owns the gaps between button wrappers. */
+.st-key-sidebar_history {gap:2px!important;row-gap:2px!important;}
+.st-key-sidebar_history > [data-testid="stLayoutWrapper"],
+.st-key-sidebar_history > [data-testid="stElementContainer"] {
+ margin-block:0!important;padding-block:0!important;min-height:0!important;flex:0 0 auto!important;}
+.st-key-sidebar_history [data-testid="stButton"] button {
+ min-height:32px!important;height:32px!important;padding-block:4px!important;}
 </style>
 """
 
@@ -600,7 +636,7 @@ def render_saved_history(query):
             period = current
         if st.button(item["title"], key=f"saved_history_{item['id']}",
                      icon=":material/chat_bubble_outline:", width="stretch",
-                     type="primary" if st.session_state.get("conversation_id") == item["id"] else "secondary"):
+                     type="secondary"):
             if load_saved_conversation(item["id"]):
                 st.session_state.answer_mode = "OpenAI AI 답변"
                 st.session_state.previous_mode = "OpenAI AI 답변"
@@ -778,7 +814,7 @@ def render_sidebar():
                     st.caption(current)
                     period = current
                 if st.button(item["title"], key=f"history_{key}", icon=":material/chat_bubble_outline:", width="stretch",
-                             type="primary" if st.session_state.get("ui_thread") == key else "secondary"):
+                             type="secondary"):
                     st.session_state.messages = deepcopy(item["messages"])
                     st.session_state.ui_scroll_to_latest = True
                     st.session_state.conversation_id = item["conversation_id"]
@@ -942,11 +978,10 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
     user_message = prepared or {"role": "user", "content": environment_question(question) + context,
                                 "display_content": question, "images": images or []}
     with st.container(key="generation_progress"):
-        progress = st.status("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…", expanded=False, type="compact")
+        progress = st.empty()
+        progress.caption("입력을 확인하는 중…" if mode == "연습 모드" else "질문을 분석하고 있어요…")
     answer_slot = st.empty()
-    if images:
-        # The pending image message is already rendered, before model work starts.
-        scroll_to_latest_question(target=len(st.session_state.messages))
+    scroll_to_latest_question(target=len(st.session_state.messages))
     streamed = []
     def show_token(token):
         streamed.append(token)
@@ -957,9 +992,9 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
                                  user_id=st.session_state.get("user_id"),
                                  conversation_id=st.session_state.get("conversation_id"),
                                  images=images or None, on_token=show_token,
-                                 on_stage=lambda label: progress.update(label=label))
+                                 on_stage=lambda label: progress.caption(label))
         if result["status"] == "success":
-            progress.update(label="답변 완성", state="complete")
+            progress.caption("답변 완성")
     elapsed_seconds = perf_counter() - started_at
     if result["status"] != "success":
         progress.empty()
@@ -983,9 +1018,7 @@ def send_question(prompt, mode, *, prepared=None, images=None, context=""):
             st.session_state.setdefault("ui_answer_timings", {})[timing_key] = elapsed_seconds
         st.session_state.ui_failure = None
         remember_conversation(mode)
-        if images:
-            # Restore the same image position after the completed answer reruns.
-            st.session_state.ui_scroll_to_latest = True
+        st.session_state.ui_scroll_to_latest = True
     else:
         st.session_state.ui_failure = {"message": user_message, "result": result, "saved_in_history": persisted}
     st.rerun()
@@ -1001,9 +1034,8 @@ def scroll_to_latest_question(target=None):
         if not indices:
             return
         target = indices[-1]
-    # Leave room below a short final answer so the question can reach the top.
+    # Use the natural scroll limit; short answers must not create blank pages.
     st.html(f"""
-    <div style="height:100dvh" aria-hidden="true"></div>
     <script>
     (() => {{
       const main = document.querySelector('[data-testid="stMain"]');
@@ -1057,6 +1089,18 @@ def render_chat():
     st.html(f'<div class="ui-header"><div class="ui-header-title">{icon("panel")}{escape(title)}</div><span>{"UI 예시" if preview else "개발 오류 상담"}</span></div>')
     body = st.empty()
     value = render_composer(preview)
+    st.html("""<script>
+    (() => {
+      const dock = document.querySelector('.st-key-composer_dock');
+      if (!dock) return;
+      window.codeclueComposerObserver?.disconnect();
+      const update = () => document.documentElement.style.setProperty(
+        '--ui-composer-clearance', `${Math.ceil(dock.getBoundingClientRect().height) + 16}px`);
+      window.codeclueComposerObserver = new ResizeObserver(update);
+      window.codeclueComposerObserver.observe(dock);
+      update();
+    })();
+    </script>""", unsafe_allow_javascript=True)
     prompt, images, notice = split_composer_value(value)
     prompt = prompt.strip()
     context, document_notices = build_context(composer_documents(value))
@@ -1070,8 +1114,6 @@ def render_chat():
         else:
             if mode == "연습 모드":
                 st.caption("연습 모드 · 실제 AI 답변이 아닙니다.")
-            else:
-                st.caption("일반 질문, 공식 문서 검색, 외부 조회, 이미지 분석, 글 파일(py, md, ipynb 등) 읽기를 제공합니다. 참고 자료가 반환되면 답변 아래에서 확인할 수 있습니다.")
             # Keep the welcome in its own stable placeholder. Clearing this slot
             # removes all previous cards before any blocking model work begins.
             welcome_slot = st.empty()
