@@ -1,10 +1,13 @@
 """UI adapter for the unchanged team graph; no retrieval or routing implementation."""
+import os
+import sys
+import threading
 from math import isfinite
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
-from src.graph.progress import StageReporter
+from src.graph.progress import LOADING, StageReporter
 
 
 def text_content(content):
@@ -130,10 +133,55 @@ def prepare_images(images):
     return prepared
 
 
+_GRAPH_READY = threading.Event()  # 그래프 모듈(재정렬 모델 포함)을 다 불러왔는지
+_warm_lock = threading.Lock()
+_warm_started = False
+NO_WARM_UP_ENV = "CODECLUE_NO_WARMUP"  # 1이면 앱을 켤 때 미리 불러오지 않는다 (시험용)
+
+
 def get_graph():
     # Keep dev's checkpointer unchanged. Each request owns its graph and checkpoints.
     from src.graph.workflow import workflow
+    _GRAPH_READY.set()  # 이후 질문에서는 "모델을 불러오는 중"을 알리지 않는다
     return workflow()
+
+
+def _warm_up_steps():
+    """첫 질문 때 한꺼번에 걸리던 준비를 미리 한다: 그래프 모듈과 재정렬 모델 불러오기, 검색기(Pinecone, BM25) 준비."""
+    get_graph()
+    from src.rag.retriever import create_hybrid_retriever
+
+    create_hybrid_retriever(filters=None, use_query_rewrite=False, use_multi_query=False, use_rerank=False)
+
+
+def warm_up(background=True):
+    """앱을 켤 때 한 번 불러서, 첫 질문의 준비 시간(약 10초 이상)을 사용자가 질문을 입력하는 동안 미리 끝내 둔다.
+
+    - 여러 번 불러도 한 번만 실행한다 (Streamlit은 화면을 다시 그릴 때마다 main.py를 다시 실행한다).
+    - background=True이면 별도 스레드에서 실행하므로 화면은 바로 뜬다. 준비가 끝나기 전에 질문하면 남은 시간만 기다린다.
+    - 실패해도 앱은 멈추지 않는다 (준비를 못 했으면 첫 질문 때 원래대로 불러온다).
+    - 환경변수 CODECLUE_NO_WARMUP=1이면 하지 않는다.
+    돌려주는 값: 이번 호출에서 실행을 시작했으면 True.
+    """
+    global _warm_started
+    if os.getenv(NO_WARM_UP_ENV) == "1":
+        return False
+    with _warm_lock:
+        if _warm_started:
+            return False
+        _warm_started = True
+
+    def run():
+        try:
+            _warm_up_steps()
+        except Exception as error:  # 미리 불러오기는 덤이라서 실패해도 무시한다
+            print("웜업 실패(무시):", type(error).__name__, str(error)[:200], file=sys.stderr)
+
+    if background:
+        threading.Thread(target=run, name="codeclue-warm-up", daemon=True).start()
+    else:
+        run()
+    return True
 
 
 def unsupported_result():
@@ -183,8 +231,8 @@ def run_chat(messages, *, conversation_id=None, graph=None, images=None, on_toke
     config = {"configurable": {"thread_id": str(conversation_id) if conversation_id is not None else str(uuid4())}}
     try:
         reporter = StageReporter(on_stage)
-        if graph is None:
-            reporter.loading_if_first_run()
+        if graph is None and not _GRAPH_READY.is_set():
+            reporter.announce(LOADING)  # 준비가 아직 끝나지 않았다 (웜업 중이거나 첫 질문)
         engine = graph if graph is not None else get_graph()
         if on_token is None and on_stage is None:
             result = engine.invoke(state, config=config)
