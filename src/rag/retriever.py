@@ -28,6 +28,8 @@
 #   retriever = create_hybrid_retriever(top_k=5, use_query_rewrite=True)
 #   documents = retriever.invoke("MCP 서버 연결하면 -32601 오류가 나요")
 
+import sys
+import types
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
@@ -35,7 +37,31 @@ from langchain_community.retrievers import PineconeHybridSearchRetriever
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pinecone import Pinecone, ServerlessSpec
-from pinecone_text.sparse import BM25Encoder
+
+
+def _import_bm25_encoder():
+    """BM25Encoder만 불러온다.
+
+    pinecone_text.sparse는 쓰지 않는 SPLADE 인코더까지 같이 불러오면서 torch와 transformers를 끌어와
+    앱 시작이 약 11초 느려진다 (2026-10 측정: 14.5초 -> 3.0초). 우리는 BM25만 쓰므로 SPLADE 모듈만 가짜로 바꿔서 건너뛴다.
+    """
+    name = "pinecone_text.sparse.splade_encoder"
+    if "pinecone_text.sparse" not in sys.modules and name not in sys.modules:
+        stub = types.ModuleType(name)
+
+        class SpladeEncoder:
+            def __init__(self, *args, **kwargs):
+                raise ImportError("SPLADE 인코더는 사용하지 않아 불러오지 않았습니다. BM25Encoder를 쓰세요.")
+
+        stub.SpladeEncoder = SpladeEncoder
+        sys.modules[name] = stub
+
+    from pinecone_text.sparse import BM25Encoder
+
+    return BM25Encoder
+
+
+BM25Encoder = _import_bm25_encoder()
 
 from src.const.config import (
     BM25_PATH,
