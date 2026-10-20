@@ -4,7 +4,9 @@ from src.const.config import (
     OPEN_API_KEY,
     OPEN_EMBEDDING_MODEL,
     OPEN_MODEL,
+    RERANK_BACKEND,
     RERANK_MODEL,
+    RERANK_ONNX_DIR,
 )
 
 
@@ -28,7 +30,24 @@ def create_openai_embedding():
 
 
 # RERANK MODEL (Cross-Encoder)
+def rerank_backend():
+    """재정렬 실행 방식을 정한다: "onnx" 또는 "torch" (설정 RERANK_BACKEND, auto면 ONNX 모델 파일이 있을 때 onnx)."""
+    from src.rag.rerank_onnx import onnx_model_ready
+
+    if RERANK_BACKEND == "torch":
+        return "torch"
+    if RERANK_BACKEND == "onnx":
+        return "onnx"
+    return "onnx" if onnx_model_ready(RERANK_ONNX_DIR) else "torch"
+
+
 def create_rerank():
+    if rerank_backend() == "onnx":
+        # torch 없이 실행하므로 시작이 빠르다 (ONNX int8, 약 570MB)
+        from src.rag.rerank_onnx import OnnxReranker
+
+        return OnnxReranker(RERANK_ONNX_DIR)
+
     # pip install sentence-transformers (첫 실행 때 모델 약 2GB 다운로드, GPU 없으면 다소 느림)
     from sentence_transformers import CrossEncoder
 
