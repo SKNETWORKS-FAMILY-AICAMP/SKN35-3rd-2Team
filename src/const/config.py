@@ -92,6 +92,15 @@ EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1536"))
 # RERANK MODEL NAME (Cross-Encoder, 로컬 실행: 다국어라 한국어 질문 ↔ 영어 문서 OK)
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
+# 재정렬 실행 방식: auto(기본) / onnx / torch
+#   onnx  : ONNX int8 모델 (torch 없이 실행. 시작이 빠르고 가볍다. src/rag/export_reranker_onnx.py로 한 번 만들어 둔다)
+#   torch : sentence-transformers CrossEncoder (원래 방식. 첫 실행 때 모델 약 2GB 다운로드)
+#   auto  : ONNX 모델 파일이 있으면 onnx, 없으면 torch
+RERANK_BACKEND = os.getenv("RERANK_BACKEND", "auto").strip().lower()
+
+# ONNX int8 재정렬 모델 폴더 (model_int8.onnx, model_int8.onnx.data, tokenizer.json). git에는 올라가지 않는다.
+RERANK_ONNX_DIR = Path(os.getenv("RERANK_ONNX_DIR") or DATA_PATH / "onnx" / "bge-reranker-v2-m3-int8")
+
 # PINECONE 서버리스 위치 (무료 플랜은 aws / us-east-1)
 PINECONE_CLOUD = os.getenv("PINECONE_CLOUD", "aws")
 PINECONE_REGION = os.getenv("PINECONE_REGION", "us-east-1")
